@@ -365,6 +365,98 @@ class SendRecvMsgs:
 
 
 ########################################################################
+# LockMgr
+########################################################################
+class LockMgr:
+    """Class LockMsg manages locking for test cases."""
+
+    def __init__(self, config_ver: "ConfigVerifier", locker_names: list[str]):
+        """Initialize the object.
+
+        Args:
+            config_ver: the ConfigVerifier object
+            locker_names: thread names that do the locking
+        """
+        self.config_ver = config_ver
+        self.locker_avail_q: deque[str] = deque(locker_names)
+        self.lock_positions: list[str] = []
+
+    ####################################################################
+    # get_lock
+    ####################################################################
+    def get_lock(self):
+        """Get the lock and verify the lock positions."""
+        locker_name = self.locker_avail_q.pop()
+        obtain_lock_serial_num = self.config_ver.add_cmd(
+            LockObtain(cmd_runners=locker_name)
+        )
+        self.lock_positions.append(locker_name)
+
+        # we can confirm only this first lock obtain
+        if len(self.lock_positions) == 1:
+            self.config_ver.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.config_ver.commander_name],
+                    confirm_cmd="LockObtain",
+                    confirm_serial_num=obtain_lock_serial_num,
+                    confirmers=locker_name,
+                )
+            )
+
+        self.config_ver.add_cmd(
+            LockVerify(
+                cmd_runners=self.config_ver.commander_name,
+                exp_positions=self.lock_positions.copy(),
+            )
+        )
+
+    ####################################################################
+    # append_requestor
+    ####################################################################
+    def append_requestor(self, requestor_name: str):
+        """Append a requestor and verify lock positions.
+
+        Args:
+            requestor_name: thread name of requestor that just obtained
+                the lock
+        """
+        self.lock_positions.append(requestor_name)
+        self.config_ver.add_cmd(
+            LockVerify(
+                cmd_runners=self.config_ver.commander_name,
+                exp_positions=self.lock_positions.copy(),
+            )
+        )
+
+    ####################################################################
+    # drop_lock
+    ####################################################################
+    def drop_lock(self, requestor_complete: bool = False):
+        """Drop the lock and verify positions.
+
+        Args:
+            requestor_complete: If True, the requestor has completed
+                its smart request and can be removed from the positions
+                list. If False, request has progressed and should now be
+                behind another lock.
+        """
+        locker_name = self.lock_positions.pop(0)
+        self.locker_avail_q.append(locker_name)
+        self.config_ver.add_cmd(LockRelease(cmd_runners=locker_name))
+
+        requestor_name = self.lock_positions.pop(0)
+        if not requestor_complete:
+            self.lock_positions.append(requestor_name)
+
+        self.config_ver.add_cmd(
+            LockVerify(
+                cmd_runners=self.config_ver.commander_name,
+                exp_positions=self.lock_positions.copy(),
+            )
+        )
+
+
+########################################################################
 # WaitType
 ########################################################################
 class WaitType(Enum):
@@ -7929,9 +8021,7 @@ class ConfigVerifier:
         pending_names = ["pending_0"]
         remote_names = ["remote_0"]
         locker_names = ["locker_0", "locker_1", "locker_2", "locker_3", "locker_4"]
-        locker_avail_q: deque[str] = deque()
-        for locker_name in reversed(locker_names):
-            locker_avail_q.append(locker_name)
+        locker_avail_q: deque[str] = deque(locker_names)
 
         joiner_names = ["joiner_0"]
 
@@ -7941,6 +8031,7 @@ class ConfigVerifier:
 
         self.create_config(active_names=active_names)
 
+        lm = LockMgr(config_ver=self, locker_names=locker_names)
         lock_positions: list[str] = []
 
         ################################################################
@@ -8040,19 +8131,20 @@ class ConfigVerifier:
         # before: none
         # after : lock_0
         ################################################################
+        lm.get_lock()
         locker_name = locker_avail_q.pop()
-        obtain_lock_serial_num_0 = self.add_cmd(LockObtain(cmd_runners=locker_name))
+        # obtain_lock_serial_num_0 = self.add_cmd(LockObtain(cmd_runners=locker_name))
         lock_positions.append(locker_name)
 
         # we can confirm only this first lock obtain
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd="LockObtain",
-                confirm_serial_num=obtain_lock_serial_num_0,
-                confirmers=locker_name,
-            )
-        )
+        # self.add_cmd(
+        #     ConfirmResponse(
+        #         cmd_runners=[self.commander_name],
+        #         confirm_cmd="LockObtain",
+        #         confirm_serial_num=obtain_lock_serial_num_0,
+        #         confirmers=locker_name,
+        #     )
+        # )
 
         self.add_cmd(
             LockVerify(
@@ -8153,7 +8245,7 @@ class ConfigVerifier:
                 )
             )
             ############################################################
-            # release lock_0 to get pend_sync to progress to setup lock
+            # release lock_0 to get pend_sync to progress to setup
             # behind lock_2
             # locks held:
             # before: lock_0|pend_sync|lock_1|remote_sync|lock_2
@@ -8212,7 +8304,7 @@ class ConfigVerifier:
             # locker_1 gets behind remote_sync
             # locks held:
             # before: lock_2|pend_sync|lock_0|remote_sync
-            # after : lock_2|pend_sync|lock_0|remote_sync|lock_2
+            # after : lock_2|pend_sync|lock_0|remote_sync|lock_1
             ############################################################
             locker_name = locker_avail_q.pop()
             self.add_cmd(LockObtain(cmd_runners=locker_name))
@@ -8226,11 +8318,11 @@ class ConfigVerifier:
 
             ############################################################
             # release lock_2 to get pend_sync to set its pending_request
-            # and then get behind lock_2 just before starting request
+            # and then get behind lock_1 just before starting request
             # loop
             # locks held:
-            # before: lock_2|pend_sync|lock_0|remote_sync|lock_2
-            # after : lock_0|remote_sync|lock_2|pend_sync
+            # before: lock_2|pend_sync|lock_0|remote_sync|lock_1
+            # after : lock_0|remote_sync|lock_1|pend_sync
             ############################################################
             locker_name = lock_positions.pop(0)
             locker_avail_q.append(locker_name)
@@ -8246,10 +8338,10 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # locker_3 gets behind pend_sync to block remote_sync
+            # locker_2 gets behind pend_sync to block remote_sync
             # locks held:
-            # before: lock_1|remote_sync|lock_4|pend_sync
-            # after : lock_1|remote_sync|lock_4|pend_sync|lock_3
+            # before: lock_0|remote_sync|lock_1|pend_sync
+            # after : lock_0|remote_sync|lock_1|pend_sync|lock_2
             ############################################################
             locker_name = locker_avail_q.pop()
             self.add_cmd(LockObtain(cmd_runners=locker_name))
@@ -8262,12 +8354,12 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # release lock_1 to get remote_sync to set its
+            # release lock_0 to get remote_sync to set its
             # pending_request and then get behind lock_2 just before
             # starting request loop
             # locks held:
-            # before: lock_1|remote_sync|lock_4|pend_sync|lock_3
-            # after : lock_4|pend_sync|lock_3|remote_sync
+            # before: lock_0|remote_sync|lock_1|pend_sync|lock_2
+            # after : lock_1|pend_sync|lock_2|remote_sync
             ############################################################
             locker_name = lock_positions.pop(0)
             locker_avail_q.append(locker_name)
@@ -8283,10 +8375,10 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # locker_1 gets behind remote_sync
+            # locker_0 gets behind remote_sync
             # locks held:
-            # before: lock_4|pend_sync|lock_3|remote_sync
-            # after : lock_4|pend_sync|lock_3|remote_sync|lock_1
+            # before: lock_1|pend_sync|lock_2|remote_sync
+            # after : lock_1|pend_sync|lock_2|remote_sync|lock_0
             ############################################################
             locker_name = locker_avail_q.pop()
             self.add_cmd(LockObtain(cmd_runners=locker_name))
@@ -8298,10 +8390,10 @@ class ConfigVerifier:
                 )
             )
             ############################################################
-            # smart_join gets behind lock_1
+            # smart_join gets behind lock_0
             # locks held:
-            # before: lock_4|pend_sync|lock_3|remote_sync|lock_1
-            # after : lock_4|pend_sync|lock_3|remote_sync|lock_1
+            # before: lock_1|pend_sync|lock_2|remote_sync|lock_0
+            # after : lock_1|pend_sync|lock_2|remote_sync|lock_0
             #         |smart_join
             ############################################################
             join_serial_num = self.add_cmd(
@@ -8316,12 +8408,12 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # locker_2 gets behind smart_join to block pend_sync
+            # locker_3 gets behind smart_join to block pend_sync
             # locks held:
-            # before: lock_4|pend_sync|lock_3|remote_sync|lock_1
+            # before: lock_1|pend_sync|lock_2|remote_sync|lock_0
             #         |smart_join
-            # after : lock_4|pend_sync|lock_3|remote_sync|lock_1
-            #         |smart_join|lock_2
+            # after : lock_1|pend_sync|lock_2|remote_sync|lock_0
+            #         |smart_join|lock_3
             ############################################################
             locker_name = locker_avail_q.pop()
             self.add_cmd(LockObtain(cmd_runners=locker_name))
@@ -8334,14 +8426,14 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # release lock_4 to get pend_sync to set sync flag for
-            # remote_sync and then get behind lock_2 (because its sync
+            # release lock_1 to get pend_sync to set sync flag for
+            # remote_sync and then get behind lock_3 (because its sync
             # flag is not yet set by remote_sync)
             # locks held:
-            # before: lock_4|pend_sync|lock_3|remote_sync|lock_1
-            #         |smart_join|lock_2
-            # after : lock_3|remote_sync|lock_1|smart_join|lock_2
-            #         |pend_sync
+            # before: lock_1|pend_sync|lock_2|remote_sync|lock_0
+            #         |smart_join|lock_3
+            # after : lock_2|remote_sync|lock_0
+            #         |smart_join|lock_3|pend_sync
             ############################################################
             locker_name = lock_positions.pop(0)
             locker_avail_q.append(locker_name)
@@ -8357,12 +8449,12 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # release lock_3 to allow remote_sync to set sync flag for
+            # release lock_2 to allow remote_sync to set sync flag for
             # pend_sync and complete the request
             # locks held:
-            # before: lock_3|remote_sync|lock_1|smart_join|lock_2
+            # before: lock_2|remote_sync|lock_0|smart_join|lock_3
             #         |pend_sync
-            # after : lock_1|smart_join|lock_2|pend_sync
+            # after : lock_0|smart_join|lock_3|pend_sync
             ############################################################
             locker_name = lock_positions.pop(0)
             locker_avail_q.append(locker_name)
@@ -8376,10 +8468,45 @@ class ConfigVerifier:
             )
         else:
             ############################################################
-            # smart_join gets behind lock_1
-            # locks held:
+            # release lock_0 to allow pend_sync to progress to
+            # start of request_set_up behind lock_1
             # before: lock_0|pend_sync|lock_1
-            # after : lock_0|pend_sync|lock_1|smart_join
+            # after : lock_1|pend_sync
+            ############################################################
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
+            lock_positions.remove(pending_names[0])
+
+            lock_positions.append(pending_names[0])
+
+            self.add_cmd(
+                LockVerify(
+                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+                )
+            )
+
+            ############################################################
+            # locker_2 gets behind pend_sync
+            # locks held:
+            # before: lock_1|pend_sync
+            # after : lock_1|pend_sync|lock_2
+            ############################################################
+            locker_name = locker_avail_q.pop()
+            self.add_cmd(LockObtain(cmd_runners=locker_name))
+            lock_positions.append(locker_name)
+
+            self.add_cmd(
+                LockVerify(
+                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+                )
+            )
+
+            ############################################################
+            # smart_join gets behind lock_2
+            # locks held:
+            # before: lock_1|pend_sync|lock_2
+            # after : lock_1|pend_sync|lock_2|smart_join
             ############################################################
             join_serial_num = self.add_cmd(
                 Join(cmd_runners=joiner_names[0], join_names=remote_names[0])
@@ -8393,9 +8520,9 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # locker_2 gets behind the smart_join
-            # before: lock_0|pend_sync|lock_1|smart_join
-            # after : lock_0|pend_sync|lock_1|smart_join|lock_2
+            # locker_0 gets behind the smart_join
+            # before: lock_1|pend_sync|lock_2|smart_join
+            # after : lock_1|pend_sync|lock_2|smart_join|lock_0
             ############################################################
             locker_name = locker_avail_q.pop()
             self.add_cmd(LockObtain(cmd_runners=locker_name))
@@ -8408,11 +8535,11 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # release lock_0 to allow pend_sync to do request_set_up
-            # to get pending_request set, and then wait behind lock_2
+            # release lock_1 to allow pend_sync to do request_set_up
+            # to get pending_request set, and then wait behind lock_0
             # before going into request loop
-            # before: lock_0|pend_sync|lock_1|smart_join|lock_2
-            # after : lock_1|smart_join|lock_2|pend_sync
+            # before: lock_1|pend_sync|lock_2|smart_join|lock_0
+            # after : lock_2|smart_join|lock_0|pend_sync
             ############################################################
             locker_name = lock_positions.pop(0)
             locker_avail_q.append(locker_name)
@@ -8461,11 +8588,71 @@ class ConfigVerifier:
         self.build_exit_suite(
             cmd_runner=self.commander_name, names=remote_names, validate_config=False
         )
+        ############################################################
+        # locker gets behind pend_sync
+        # locks held:
+        # before: lock|smart_join|lock|pend_sync
+        # after : lock|smart_join|lock|pend_sync|lock
+        ############################################################
+        locker_name = locker_avail_q.pop()
+        self.add_cmd(LockObtain(cmd_runners=locker_name))
+        lock_positions.append(locker_name)
+
+        self.add_cmd(
+            LockVerify(
+                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            )
+        )
 
         ############################################################
-        # release lock_1 to allow smart_join to remove remotes
-        # before: lock_1|smart_join|lock_2|pend_sync
-        # after : lock_2|pend_sync
+        # release lock to allow smart_join to progress to start of loop
+        # behind lock
+        # before: lock|smart_join|lock|pend_sync|lock
+        # after : lock|pend_sync|lock|smart_join
+        ############################################################
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
+        # releasing lock 1 will allow the smart_join to complete
+        lock_positions.remove(joiner_names[0])
+        lock_positions.append(joiner_names[0])
+
+        self.add_cmd(
+            LockVerify(
+                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            )
+        )
+
+        ################################################################
+        # before: lock|pend_sync|lock|smart_join
+        # action: swap pend_sync and smart_join
+        # after : lock|smart_join|lock|pend_sync
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        # assert lock_positions[0] == locker_names[1]
+        # assert lock_positions[1] == sync_names[1]
+        # assert lock_positions[2] == locker_names[0]
+        # assert lock_positions[3] == sync_names[0]
+        # assert lock_positions[4] == locker_names[2]
+
+        self.add_cmd(
+            LockSwap(
+                cmd_runners=self.commander_name, new_positions=lock_positions.copy()
+            )
+        )
+        self.add_cmd(
+            LockVerify(
+                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            )
+        )
+
+        ############################################################
+        # release lock to allow smart_join to remove remote_sync
+        # before: lock|smart_join|lock|pend_sync
+        # after : lock|pend_sync
         ############################################################
         locker_name = lock_positions.pop(0)
         locker_avail_q.append(locker_name)
@@ -8519,8 +8706,8 @@ class ConfigVerifier:
 
         if lock_positions:  # if we still hold lock_2
             ############################################################
-            # release lock_2 to allow pend_sync to complete
-            # before: lock_2|pend_sync
+            # release lock to allow pend_sync to complete
+            # before: lock|pend_sync
             # after : none
             ############################################################
             locker_name = lock_positions.pop(0)
