@@ -384,11 +384,16 @@ class LockMgr:
     ####################################################################
     # get_lock
     ####################################################################
-    def get_lock(self):
-        """Get the lock and verify the lock positions."""
+    def get_lock(self, alt_frame_num: int = 1):
+        """Get the lock and verify the lock positions.
+
+        Args:
+            alt_frame_num: frame to get line_num
+
+        """
         locker_name = self.locker_avail_q.pop()
         obtain_lock_serial_num = self.config_ver.add_cmd(
-            LockObtain(cmd_runners=locker_name)
+            LockObtain(cmd_runners=locker_name), alt_frame_num=alt_frame_num
         )
         self.lock_positions.append(locker_name)
 
@@ -400,38 +405,36 @@ class LockMgr:
                     confirm_cmd="LockObtain",
                     confirm_serial_num=obtain_lock_serial_num,
                     confirmers=locker_name,
-                )
+                ),
+                alt_frame_num=alt_frame_num,
             )
 
         self.config_ver.add_cmd(
             LockVerify(
                 cmd_runners=self.config_ver.commander_name,
                 exp_positions=self.lock_positions.copy(),
-            )
+            ),
+            alt_frame_num=alt_frame_num,
         )
 
     ####################################################################
     # append_requestor
     ####################################################################
-    def append_requestor(self, requestor_name: str):
+    def append_requestor(self, requestor_name: str, alt_frame_num: int = 1):
         """Append a requestor and verify lock positions.
 
         Args:
             requestor_name: thread name of requestor that just obtained
                 the lock
+            alt_frame_num: frame to get line_num
         """
         self.lock_positions.append(requestor_name)
-        self.config_ver.add_cmd(
-            LockVerify(
-                cmd_runners=self.config_ver.commander_name,
-                exp_positions=self.lock_positions.copy(),
-            )
-        )
+        self.get_lock(alt_frame_num=alt_frame_num + 1)
 
     ####################################################################
     # drop_lock
     ####################################################################
-    def drop_lock(self, requestor_complete: bool = False):
+    def drop_lock(self, requestor_complete: bool = False, alt_frame_num: int = 1):
         """Drop the lock and verify positions.
 
         Args:
@@ -439,10 +442,13 @@ class LockMgr:
                 its smart request and can be removed from the positions
                 list. If False, request has progressed and should now be
                 behind another lock.
+            alt_frame_num: frame to get line_num
         """
         locker_name = self.lock_positions.pop(0)
         self.locker_avail_q.append(locker_name)
-        self.config_ver.add_cmd(LockRelease(cmd_runners=locker_name))
+        self.config_ver.add_cmd(
+            LockRelease(cmd_runners=locker_name), alt_frame_num=alt_frame_num
+        )
 
         requestor_name = self.lock_positions.pop(0)
         if not requestor_complete:
@@ -452,7 +458,57 @@ class LockMgr:
             LockVerify(
                 cmd_runners=self.config_ver.commander_name,
                 exp_positions=self.lock_positions.copy(),
-            )
+            ),
+            alt_frame_num=alt_frame_num,
+        )
+
+    ####################################################################
+    # complete_request
+    ####################################################################
+    def complete_request(self, alt_frame_num: int = 1):
+        """Drop the lock and verify positions.
+
+        Args:
+            alt_frame_num: frame to get line_num
+        """
+        self.drop_lock(requestor_complete=True, alt_frame_num=alt_frame_num + 1)
+
+    ####################################################################
+    # progress_request
+    ####################################################################
+    def progress_request(self, alt_frame_num: int = 1):
+        """Drop the lock, requeue the requestor, verify positions.
+
+        Args:
+            alt_frame_num: frame to get line_num
+        """
+        self.drop_lock(requestor_complete=False, alt_frame_num=alt_frame_num + 1)
+        self.get_lock(alt_frame_num=alt_frame_num + 1)
+
+    ####################################################################
+    # progress_request
+    ####################################################################
+    def swap_requestors(self, alt_frame_num: int = 1):
+        """Swap the requests lock positions.
+
+        Args:
+            alt_frame_num: frame to get line_num
+        """
+        lock_pos_1 = self.lock_positions[1]
+        self.lock_positions[1] = self.lock_positions[3]
+        self.lock_positions[3] = lock_pos_1
+
+        self.add_cmd(
+            LockSwap(
+                cmd_runners=self.commander_name, new_positions=lock_positions.copy()
+            ),
+            alt_frame_num=alt_frame_num,
+        )
+        self.add_cmd(
+            LockVerify(
+                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            ),
+            alt_frame_num=alt_frame_num,
         )
 
 
@@ -796,6 +852,7 @@ class ConfigCmd(ABC):
         # the command.
         self.serial_num: int = 0
         self.line_num: int = 0
+        self.alt_line_num: int = 0
         self.config_ver: "ConfigVerifier"
 
         # specified_args are set in each subclass
@@ -810,7 +867,9 @@ class ConfigCmd(ABC):
         if TYPE_CHECKING:
             __class__: Type[ConfigVerifier]  # noqa: F842
         classname = self.__class__.__name__
-        parms = f"serial={self.serial_num}, " f"line={self.line_num}"
+        parms = f"serial={self.serial_num}, line={self.line_num}"
+        if self.alt_line_num:
+            parms += f"({self.alt_line_num})"
         comma = ", "
         for key, item in self.specified_args.items():
             if item:  # if not None
@@ -5798,29 +5857,46 @@ class ConfigVerifier:
     ####################################################################
     # add_cmd
     ####################################################################
-    def add_cmd(self, cmd: ConfigCmd) -> int:
+    def add_cmd(self, cmd: ConfigCmd, alt_frame_num: Optional[int] = None) -> int:
         """Add a command to the deque.
 
         Args:
             cmd: command to add
+            alt_frame_num: non-zero indicates to add the line number for
+                the specified frame to the cmd object so that it will be
+                included with in the log just after the line_num in
+                parentheses
 
         Returns:
             the serial number for the command
 
         """
-        serial_num = self.add_cmd_info(cmd=cmd, frame_num=2)
+        if alt_frame_num is not None:
+            alt_frame_num += 2
+        serial_num = self.add_cmd_info(
+            cmd=cmd, frame_num=2, alt_frame_num=alt_frame_num
+        )
         self.cmd_suite.append(cmd)
         return serial_num
 
     ####################################################################
     # add_cmd_info
     ####################################################################
-    def add_cmd_info(self, cmd: ConfigCmd, frame_num: int = 1) -> int:
+    def add_cmd_info(
+        self,
+        cmd: ConfigCmd,
+        frame_num: int = 1,
+        alt_frame_num: Optional[int] = None,
+    ) -> int:
         """Add a command to the deque.
 
         Args:
             cmd: command to add
             frame_num: how many frames back to go for line number
+            alt_frame_num: non-zero indicates to add the line number for
+                the specified frame to the cmd object so that it will be
+                included with in the log just after the line_num in
+                parentheses
 
         Returns:
             the serial number for the command
@@ -5831,8 +5907,14 @@ class ConfigVerifier:
         frame = _getframe(frame_num)
         caller_info = get_caller_info(frame)
         cmd.line_num = caller_info.line_num
-        cmd.config_ver = self
         del frame
+        if alt_frame_num is not None and alt_frame_num > 0:
+            frame = _getframe(alt_frame_num)
+            caller_info = get_caller_info(frame)
+            cmd.alt_line_num = caller_info.line_num
+            del frame
+
+        cmd.config_ver = self
 
         return self.cmd_serial_num
 
@@ -8173,6 +8255,7 @@ class ConfigVerifier:
             )
         )
 
+        lm.append_requestor(requestor_name=pending_names[0])
         lock_positions.append(pending_names[0])
 
         self.add_cmd(
@@ -8194,7 +8277,7 @@ class ConfigVerifier:
         # after : lock_0|pend_sync|lock_1
         ################################################################
         locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
+        # self.add_cmd(LockObtain(cmd_runners=locker_name))
         lock_positions.append(locker_name)
 
         self.add_cmd(
