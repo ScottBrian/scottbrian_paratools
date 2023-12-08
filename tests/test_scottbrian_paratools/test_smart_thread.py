@@ -483,14 +483,16 @@ class LockMgr:
     ####################################################################
     # progress_request
     ####################################################################
-    def progress_request(self, alt_frame_num: int = 1):
+    def progress_request(self, caboose: bool = False, alt_frame_num: int = 1):
         """Drop the lock, requeue the requestor, verify positions.
 
         Args:
+            caboose: if True, do not add a lock at end
             alt_frame_num: frame to get line_num
         """
         self.drop_lock(requestor_complete=False, alt_frame_num=alt_frame_num + 1)
-        self.get_lock(alt_frame_num=alt_frame_num + 1)
+        if not caboose:
+            self.get_lock(alt_frame_num=alt_frame_num + 1)
 
     ####################################################################
     # progress_request
@@ -505,15 +507,17 @@ class LockMgr:
         self.lock_positions[1] = self.lock_positions[3]
         self.lock_positions[3] = lock_pos_1
 
-        self.add_cmd(
+        self.config_ver.add_cmd(
             LockSwap(
-                cmd_runners=self.commander_name, new_positions=lock_positions.copy()
+                cmd_runners=self.config_ver.commander_name,
+                new_positions=self.lock_positions.copy(),
             ),
             alt_frame_num=alt_frame_num,
         )
-        self.add_cmd(
+        self.config_ver.add_cmd(
             LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+                cmd_runners=self.config_ver.commander_name,
+                exp_positions=self.lock_positions.copy(),
             ),
             alt_frame_num=alt_frame_num,
         )
@@ -8740,29 +8744,29 @@ class ConfigVerifier:
         # behind lock
         # before: lock|smart_join|lock|pend_sync|lock
         # after : lock|pend_sync|lock|smart_join
-        ############################################################
-
+        ################################################################
+        lm.progress_request(caboose=True)
         locker_name = lock_positions.pop(0)
         locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
+        # self.add_cmd(LockRelease(cmd_runners=locker_name))
         # releasing lock 1 will allow the smart_join to complete
         lock_positions.remove(joiner_names[0])
         lock_positions.append(joiner_names[0])
 
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
         ############################################################
         # locker gets behind smart_join
         # locks held:
         # before: lock|pend_sync|lock|smart_join
         # after : lock|pend_sync|lock|smart_join|lock
         ############################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
+        # locker_name = locker_avail_q.pop()
+        # self.add_cmd(LockObtain(cmd_runners=locker_name))
+        # lock_positions.append(locker_name)
         #
         self.add_cmd(
             LockVerify(
@@ -8775,6 +8779,7 @@ class ConfigVerifier:
         # action: swap pend_sync and smart_join
         # after : lock|smart_join|lock|pend_sync|lock
         ################################################################
+        lm.swap_requestors()
         lock_pos_1 = lock_positions[1]
         lock_positions[1] = lock_positions[3]
         lock_positions[3] = lock_pos_1
@@ -8785,11 +8790,11 @@ class ConfigVerifier:
         # assert lock_positions[3] == sync_names[0]
         # assert lock_positions[4] == locker_names[2]
 
-        self.add_cmd(
-            LockSwap(
-                cmd_runners=self.commander_name, new_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockSwap(
+        #         cmd_runners=self.commander_name, new_positions=lock_positions.copy()
+        #     )
+        # )
         self.add_cmd(
             LockVerify(
                 cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
@@ -8798,12 +8803,13 @@ class ConfigVerifier:
 
         ############################################################
         # release lock to allow smart_join to remove remote_sync
-        # before: lock|smart_join|lock|pend_sync|lock
-        # after : lock|pend_sync|lock
+        # before: lock|smart_join|lock|pend_sync
+        # after : lock|pend_sync
         ############################################################
+        lm.complete_request()
         locker_name = lock_positions.pop(0)
         locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
+        # self.add_cmd(LockRelease(cmd_runners=locker_name))
         # releasing lock 1 will allow the smart_join to complete
         lock_positions.remove(joiner_names[0])
 
@@ -8854,13 +8860,23 @@ class ConfigVerifier:
         if lock_positions:  # if we still hold lock_2
             ############################################################
             # release lock to allow pend_sync to complete
-            # before: lock|pend_sync|lock
-            # after : lock
+            # before: lock|pend_sync
+            # after :
             ############################################################
+            lm.complete_request()
+            # if pending_wait_tf:
+            #     lm.complete_request()
+            # else:
+            #     lm.progress_request()
             locker_name = lock_positions.pop(0)
             locker_avail_q.append(locker_name)
-            self.add_cmd(LockRelease(cmd_runners=locker_name))
+            # self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(pending_names[0])
+            # if not pending_wait_tf:
+            #     lock_positions.append(pending_names[0])
+            #     locker_name = locker_avail_q.pop()
+            #     # self.add_cmd(LockObtain(cmd_runners=locker_name))
+            #     lock_positions.append(locker_name)
 
             self.add_cmd(
                 LockVerify(
@@ -8869,19 +8885,32 @@ class ConfigVerifier:
             )
             ############################################################
             # release final lock
-            # before: lock
+            # before: lock or lock|pend_sync|lock
             # after : none
             ############################################################
-            locker_name = lock_positions.pop(0)
-            locker_avail_q.append(locker_name)
-            self.add_cmd(LockRelease(cmd_runners=locker_name))
-            lock_positions.remove(pending_names[0])
-
-            self.add_cmd(
-                LockVerify(
-                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-                )
-            )
+            # locker_name = lock_positions.pop(0)
+            # locker_avail_q.append(locker_name)
+            # self.add_cmd(LockRelease(cmd_runners=locker_name))
+            # if not pending_wait_tf:
+            #     lock_positions.remove(pending_names[0])
+            #     lock_positions.append(pending_names[0])
+            #
+            # self.add_cmd(
+            #     LockVerify(
+            #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            #     )
+            # )
+            # if not pending_wait_tf:
+            #     locker_name = lock_positions.pop(0)
+            #     locker_avail_q.append(locker_name)
+            #     self.add_cmd(LockRelease(cmd_runners=locker_name))
+            #     lock_positions.remove(pending_names[0])
+            #     self.add_cmd(
+            #         LockVerify(
+            #             cmd_runners=self.commander_name,
+            #             exp_positions=lock_positions.copy(),
+            #         )
+            #     )
 
         ################################################################
         # confirm the pend_sync is done
