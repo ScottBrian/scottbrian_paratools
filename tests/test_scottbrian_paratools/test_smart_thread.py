@@ -8875,8 +8875,6 @@ class ConfigVerifier:
         pending_name = pending_names[0]
         remote_name = remote_names[0]
 
-        lock_positions: list[str] = []
-
         timeout_time: IntOrFloat = 2
         pause_time: IntOrFloat = timeout_time * 1.5
 
@@ -8904,9 +8902,9 @@ class ConfigVerifier:
         lm.get_lock()
 
         ################################################################
-        # before: lock_0
-        # remote_sync will get behind lock_0 in request_setup
-        # after : lock_0|remote_sync
+        # before: lock
+        # remote_sync will get behind lock in _verify_thread_is_current
+        # after : lock|remote_sync_vt|lock
         ################################################################
         remote_sync_serial_num = self.add_cmd(
             SyncTimeoutTrue(
@@ -8918,70 +8916,49 @@ class ConfigVerifier:
             )
         )
 
-        lock_positions.append(remote_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.append_requestor(remote_name)
 
         ################################################################
-        # lock_1 gets behind remote_sync
-        # locks held:
-        # before: lock_0|remote_sync
-        # after : lock_0|remote_sync|lock_1
+        # before: lock|remote_sync_vt|lock
+        # remote_sync will get behind lock in request_setup
+        # after : lock|remote_sync_rs|lock
         ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.progress_request()
 
         ################################################################
         # release lock_0 to allow remote_sync to do request_set_up and
         # then wait behind lock_1 just before going into request loop
         # locks held:
-        # before: lock_0|remote_sync|lock_1
-        # after : lock_1|remote_sync
+        # before: lock_0|remote_sync_rs|lock_1
+        # after : lock_1|remote_sync_rl
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
-        lock_positions.remove(remote_name)
-        lock_positions.append(remote_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
 
         ################################################################
         # lock_0 gets behind remote_sync
         # locks held:
-        # before: lock_1|remote_sync
-        # after : lock_1|remote_sync|lock_0
+        # before: lock_1|remote_sync_rl
+        # after : lock_1|remote_sync_rl|lock_0
         ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
 
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        ################################################################
+        # pend_sync will get behind lock in _verify_thread_is_current
+        # locks held:
+        # before: lock_1|remote_sync_rl|lock_0
+        # after : lock_1|remote_sync_rl|lock_0|pend_sync_vs
+        ################################################################
 
         ################################################################
         # pend_sync will get behind lock_0 in request_setup
         # locks held:
-        # before: lock_1|remote_sync|lock_0
-        # after : lock_1|remote_sync|lock_0|pend_sync
+        # before: lock_1|remote_sync_rl|lock_0
+        # after : lock_1|remote_sync_rl|lock_0|pend_sync_rs
+        ################################################################
+        ################################################################
+        # New:
+        # pend_sync will get behind lock in _verify_thread_is_current
+        # locks held:
+        # before: lock|remote_sync_rs|lock
+        # after : lock|remote_sync_rs|lock|pend_sync_vt|lock
         ################################################################
         pend_sync_serial_num = self.add_cmd(
             Sync(
@@ -8991,98 +8968,43 @@ class ConfigVerifier:
             )
         )
 
-        lock_positions.append(pending_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.append_requestor(pending_name)
 
         ################################################################
-        # lock_2 gets behind pend_sync
+        # New:
+        # remote_sync will progress start of request loop
         # locks held:
-        # before: lock_1|remote_sync|lock_0|pend_sync
-        # after : lock_1|remote_sync|lock_0|pend_sync|lock_2
+        # before: lock|remote_sync_rs|lock|pend_sync_vt|lock
+        # after : lock|pend_sync_vt|lock|remote_sync_rl
         ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
+        lm.progress_request()
 
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        ################################################################
+        # New:
+        # pend_sync will progress to setup
+        # locks held:
+        # before: lock|pend_sync_vt|lock|remote_sync_rl
+        # after : lock|remote_sync_rl|lock|pend_sync_rs|lock
+        ################################################################
+        lm.progress_request()
+
         ################################################################
         # release lock_1 to allow remote_sync to enter the request loop
         # and set the pending_name sync flag, and then get behind lock_0
         # locks held:
-        # before: lock_1|remote_sync|lock_0|pend_sync|lock_2
-        # after : lock_0|pend_sync|lock_2|remote_sync
+        # before: lock|remote_sync_rl|lock|pend_sync_rs|lock
+        # after : lock|pend_sync_rs|lock|remote_sync_rl2|lock
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
-        lock_positions.remove(remote_name)
-        lock_positions.append(remote_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
-
-        ################################################################
-        # lock_1 gets behind remote_sync
-        # locks held:
-        # before: lock_0|pend_sync|lock_2|remote_sync
-        # after : lock_0|pend_sync|lock_2|remote_sync|lock_1
-        ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.progress_request()
 
         ################################################################
         # release lock_0 to allow pend_sync to do setup and then wait
         # behind lock_1 just before entering request loop
         # locks held:
-        # before: lock_0|pend_sync|lock_2|remote_sync|lock_1
-        # after : lock_2|remote_sync|lock_1|pend_sync
+        # before: lock|pend_sync_rs|lock|remote_sync_rl|lock
+        # after : lock|remote_sync_rl|lock|pend_sync_rl|lock
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
-        lock_positions.remove(pending_name)
-        lock_positions.append(pending_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
-
-        ################################################################
-        # lock_0 gets behind pend_sync
-        # locks held:
-        # before: lock_2|remote_sync|lock_1|pend_sync
-        # after : lock_2|remote_sync|lock_1|pend_sync|lock_0
-        ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.progress_request()
 
         ################################################################
         # pause to cause remote_sync to timeout
@@ -9090,43 +9012,24 @@ class ConfigVerifier:
         self.add_cmd(Pause(cmd_runners=self.commander_name, pause_seconds=pause_time))
 
         ################################################################
-        # release lock_2 to allow remote_sync to enter the request loop
+        # release lock to allow remote_sync to enter the request loop
         # and see no progress from the pending_name, and then
-        # timeout and get behind lock_0 just before sync backout
+        # timeout and get behind lock just before sync backout
         # locks held:
-        # before: lock_2|remote_sync|lock_1|pend_sync|lock_0
-        # after : lock_1|pend_sync|lock_0|remote_sync
+        # before: lock|remote_sync_rl|lock|pend_sync_rl|lock
+        # after : lock|pend_sync_rl|lock|remote_sync_sb
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
-        lock_positions.remove(remote_name)
-        lock_positions.append(remote_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.progress_request(trailing_lock=False)
 
         ################################################################
-        # release lock_1 to allow pend_sync to enter the request loop
+        # release lock to allow pend_sync to enter the request loop
         # and set sync event for remote_sync and see that its sync event
         # is set and complete the sync request
         # locks held:
-        # before: lock_1|pend_sync|lock_0|remote_sync
-        # after : lock_0|remote_sync
+        # before: lock|pend_sync_rl|lock|remote_sync_sb
+        # after : lock|remote_sync_sb
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
-        lock_positions.remove(pending_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.complete_request()
 
         ################################################################
         # Set the ack message for the completed sync by pend_sync.
@@ -9137,22 +9040,13 @@ class ConfigVerifier:
         pe[PE.ack_msg][ack_key] += 1
 
         ################################################################
-        # release lock_0 to allow remote_sync to enter the backout
+        # release lock to allow remote_sync to enter the backout
         # routine to reset its sync event flag
         # locks held:
-        # before: lock_0|remote_sync
+        # before: lock|remote_sync_sb
         # after : none
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
-        lock_positions.remove(remote_name)
-
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        lm.complete_request()
 
         ################################################################
         # We also need to set the ack message for the backout.
