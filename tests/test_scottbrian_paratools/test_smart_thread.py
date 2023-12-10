@@ -420,12 +420,15 @@ class LockMgr:
     ####################################################################
     # append_requestor
     ####################################################################
-    def append_requestor(self, requestor_name: str, alt_frame_num: int = 1):
+    def append_requestor(
+        self, requestor_name: str, trailing_lock: bool = True, alt_frame_num: int = 1
+    ):
         """Append a requestor and verify lock positions.
 
         Args:
             requestor_name: thread name of requestor that just obtained
                 the lock
+            trailing_lock: if True, add a lock at end
             alt_frame_num: frame to get line_num
         """
         self.lock_positions.append(requestor_name)
@@ -436,7 +439,8 @@ class LockMgr:
             ),
             alt_frame_num=alt_frame_num,
         )
-        self.get_lock(alt_frame_num=alt_frame_num + 1)
+        if trailing_lock:
+            self.get_lock(alt_frame_num=alt_frame_num + 1)
 
     ####################################################################
     # drop_lock
@@ -487,7 +491,9 @@ class LockMgr:
             free_all: specifies that all requests will complete
             alt_frame_num: frame to get line_num
         """
-        self.drop_lock(requestor_complete=True, alt_frame_num=alt_frame_num + 1)
+        self.drop_lock(
+            requestor_complete=True, free_all=free_all, alt_frame_num=alt_frame_num
+        )
 
     ####################################################################
     # advance_request
@@ -10349,7 +10355,7 @@ class ConfigVerifier:
         # 's' means behind the lock in _request_setup
         # 'r' means behind the lock in _request_loop
         # 'f' means behind the lock before doing a refresh pair_array
-        # 'c' means the lock in _cmd_loop (e.g., for del or add)
+        # 'i' means the lock in register for add
         ################################################################
         ################################################################
         # verify locks held:
@@ -10505,7 +10511,32 @@ class ConfigVerifier:
                 lm.append_requestor(deleter_names[0])
                 # second_cmd_lock_pos = deleter_names[0]
                 # lock_positions.append(deleter_names[0])
+
+                ########################################################
+                # before: lock|req_0_s|lock|smart_join_v|lock
+                # action: drop lock
+                # after:  lock|smart_join_v|lock|req_0_r
+                ########################################################
+                lm.advance_request(trailing_lock=False)
+
+                ########################################################
+                # before: lock|smart_join_v|lock|req_0_r
+                # action: drop lock
+                # after:  lock|req_0_r|smart_join_r
+                ########################################################
+                lm.advance_request(trailing_lock=False)
             else:  # must be add
+                ########################################################
+                # before: lock|req_0_s|lock
+                # action: drop lock to allow first req to advance to
+                #         request loop
+                # after:  lock|req_0_r
+                ########################################################
+                lm.advance_request(trailing_lock=False)
+
+                ########################################################
+                # smart_init
+                ########################################################
                 f1_create_items = [
                     F1CreateItem(
                         name=add_names[0],
@@ -10520,26 +10551,13 @@ class ConfigVerifier:
                     validate_config=False,
                 )
                 ########################################################
-                # before: lock|req_0_s|lock
+                # before: lock|req_0_r
                 # action: smart_init
-                # after:  lock|req_0_s|lock|smart_init_v|lock
+                # after:  lock|req_0_r|smart_init_i
                 ########################################################
-                lm.append_requestor(adder_names[0])
+                lm.append_requestor(adder_names[0], trailing_lock=False)
                 # second_cmd_lock_pos = adder_names[0]
                 # lock_positions.append(adder_names[0])
-            ########################################################
-            # before: lock|req_0_s|lock|smart_cmd_v|lock
-            # action: drop lock
-            # after:  lock|smart_cmd_v|lock|req_0_r
-            ########################################################
-            lm.advance_request(trailing_lock=False)
-
-            ########################################################
-            # before: lock|smart_cmd_v|lock|req_0_r
-            # action: drop lock
-            # after:  lock|req_0_r|smart_cmd_c
-            ########################################################
-            lm.advance_request(trailing_lock=False)
 
             ############################################################
             # verify locks held: lock_1|request_0b|request_1b
@@ -10916,9 +10934,6 @@ class ConfigVerifier:
         """Add ConfigCmd items for a deferred delete.
 
         Args:
-            lock_positions: ordered list of requests waiting on lock
-            first_cmd_lock_pos: either recv or wait as request_0
-            second_cmd_lock_pos: either add or del as request_1
             lm: lock manager
 
         """
@@ -10941,9 +10956,12 @@ class ConfigVerifier:
         ################################################################
         ################################################################
         # before:  lock|req_0_r|smart_cmd_c
-        # action: release lock to allow request_0 to progress to doing
-        #         the refresh which means the del or add request will
-        #         proceed and do the refresh ahead of request_0 ???
+        # action: release lock to allow request_0 to complete the
+        #         request nad then advance to the lock for refresh, and
+        #         the add or del will do the refresh ahead of the recv
+        #         or wait and complete. The recv or wait will then enter
+        #         refresh but find nothing to do (will not produce the
+        #         update at UTC message).
         # after:  none
         ################################################################
         lm.complete_request(free_all=True)
