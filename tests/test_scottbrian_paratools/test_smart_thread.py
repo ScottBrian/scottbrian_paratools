@@ -441,7 +441,12 @@ class LockMgr:
     ####################################################################
     # drop_lock
     ####################################################################
-    def drop_lock(self, requestor_complete: bool = False, alt_frame_num: int = 1):
+    def drop_lock(
+        self,
+        requestor_complete: bool = False,
+        free_all: bool = False,
+        alt_frame_num: int = 1,
+    ):
         """Drop the lock and verify positions.
 
         Args:
@@ -449,6 +454,7 @@ class LockMgr:
                 its smart request and can be removed from the positions
                 list. If False, request has progressed and should now be
                 behind another lock.
+            free_all: specifies that all requests will complete
             alt_frame_num: frame to get line_num
         """
         locker_name = self.lock_positions.pop(0)
@@ -460,6 +466,8 @@ class LockMgr:
         requestor_name = self.lock_positions.pop(0)
         if not requestor_complete:
             self.lock_positions.append(requestor_name)
+        if free_all:
+            self.lock_positions = []
 
         self.config_ver.add_cmd(
             LockVerify(
@@ -472,18 +480,19 @@ class LockMgr:
     ####################################################################
     # complete_request
     ####################################################################
-    def complete_request(self, alt_frame_num: int = 1):
+    def complete_request(self, free_all: bool = False, alt_frame_num: int = 1):
         """Drop the lock and verify positions.
 
         Args:
+            free_all: specifies that all requests will complete
             alt_frame_num: frame to get line_num
         """
         self.drop_lock(requestor_complete=True, alt_frame_num=alt_frame_num + 1)
 
     ####################################################################
-    # progress_request
+    # advance_request
     ####################################################################
-    def progress_request(self, trailing_lock: bool = True, alt_frame_num: int = 1):
+    def advance_request(self, trailing_lock: bool = True, alt_frame_num: int = 1):
         """Drop the lock, requeue the requestor, verify positions.
 
         Args:
@@ -495,7 +504,7 @@ class LockMgr:
             self.get_lock(alt_frame_num=alt_frame_num + 1)
 
     ####################################################################
-    # progress_request
+    # advance_request
     ####################################################################
     def swap_requestors(self, alt_frame_num: int = 1):
         """Swap the requests lock positions.
@@ -7721,7 +7730,7 @@ class ConfigVerifier:
             # before: lock|smart_req|lock
             # after : lock|smart_req|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # smart_join gets behind lock
@@ -7742,7 +7751,7 @@ class ConfigVerifier:
             # before: lock|smart_req|lock|smart_join|lock
             # after : lock|smart_join|lock|smart_req|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
         ################################################################
         # verify results
@@ -7787,7 +7796,7 @@ class ConfigVerifier:
             # before: lock|smart_join|lock|smart_req|lock
             # after : lock|smart_req|lock|smart_join
             ############################################################
-            lm.progress_request(trailing_lock=False)
+            lm.advance_request(trailing_lock=False)
 
             ############################################################
             # swap smart_req and joiner to allow joiner to go first
@@ -8107,7 +8116,7 @@ class ConfigVerifier:
             # before: lock|pend_sync|lock|remote_sync|lock
             # after : lock|remote_sync|lock|pend_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # release lock to get remote_sync to progress to setup
@@ -8116,7 +8125,7 @@ class ConfigVerifier:
             # before: lock|remote_sync|lock|pend_sync|lock
             # after : lock|pend_sync|lock|remote_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # release lock to get pend_sync to set its pending_request
@@ -8126,7 +8135,7 @@ class ConfigVerifier:
             # before: lock|pend_sync|lock|remote_sync|lock
             # after : lock|remote_sync|lock|pend_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # release lock to get remote_sync to set its pending_request
@@ -8135,7 +8144,7 @@ class ConfigVerifier:
             # before: lock|remote_sync|lock|pend_sync|lock
             # after : lock|pend_sync|lock|remote_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # smart_join gets behind lock
@@ -8159,7 +8168,7 @@ class ConfigVerifier:
             # after : lock|remote_sync|lock|smart_join|lock|pend_sync
             #         |lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # release lock to allow remote_sync to set sync flag for
@@ -8178,7 +8187,7 @@ class ConfigVerifier:
             # before: lock|pend_sync|lock
             # after : lock|pend_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # smart_join gets behind lock
@@ -8198,7 +8207,7 @@ class ConfigVerifier:
             # before: lock|pend_sync|lock|smart_join|lock
             # after : lock|smart_join|lock|pend_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
         ################################################################
         # verify results
@@ -8241,7 +8250,7 @@ class ConfigVerifier:
         # before: lock|smart_join|lock|pend_sync|lock
         # after : lock|pend_sync|lock|smart_join
         ################################################################
-        lm.progress_request(trailing_lock=False)
+        lm.advance_request(trailing_lock=False)
 
         ################################################################
         # before: lock|pend_sync|lock|smart_join
@@ -8525,7 +8534,7 @@ class ConfigVerifier:
             # before: lock|smart_sync|lock
             # after : lock|smart_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # smart_join gets behind lock in _verify_thread_is_current
@@ -8546,7 +8555,7 @@ class ConfigVerifier:
             # before: lock|smart_sync|lock|smart_join|lock
             # after : lock|smart_join|lock|smart_sync|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # release lock to allow smart_join to progress to loop
@@ -8554,7 +8563,7 @@ class ConfigVerifier:
             # before: lock|smart_join|lock|smart_sync|lock
             # after : lock|smart_sync|lock|smart_join|lock
             ############################################################
-            lm.progress_request()
+            lm.advance_request()
 
             ############################################################
             # release lock to allow smart_sync to set the sync flag in
@@ -8563,7 +8572,7 @@ class ConfigVerifier:
             # before: lock|smart_sync|lock|smart_join|lock
             # after : lock|smart_join|lock|smart_sync
             ############################################################
-            lm.progress_request(trailing_lock=False)
+            lm.advance_request(trailing_lock=False)
 
             pair_key = st.SmartThread._get_pair_key(remote_name, pending_name)
             check_pend_arg: CheckPendArg = (pending_name, pair_key)
@@ -8924,7 +8933,7 @@ class ConfigVerifier:
         # after : lock|remote_sync_rs|lock
         # should see smart_sync entry for remote_0
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
         # pend_sync will get behind lock in _verify_thread_is_current
@@ -8950,7 +8959,7 @@ class ConfigVerifier:
         # after : lock|pend_sync_vt|lock|remote_sync_rl|lock
         # should see remote_0 smart_sync setup complete
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
         # pend_sync will progress to setup
@@ -8959,7 +8968,7 @@ class ConfigVerifier:
         # after : lock|remote_sync_rl|lock|pend_sync_rs|lock
         # should see smart_sync entry for pending_0
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
         # release lock to allow remote_sync to enter the request loop
@@ -8970,7 +8979,7 @@ class ConfigVerifier:
         # after : lock|pend_sync_rs|lock|remote_sync_rl2|lock
         # should see remote_0 (test1) smart_sync set flag for pending_0
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
         # release lock to allow pend_sync to do setup and then wait
@@ -8980,7 +8989,7 @@ class ConfigVerifier:
         # after : lock|remote_sync_rl2|lock|pend_sync_rl|lock
         # should see pending_0 (test1) smart_sync setup complete
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
         # pause to cause remote_sync to timeout
@@ -8995,7 +9004,7 @@ class ConfigVerifier:
         # before: lock|remote_sync_rl2|lock|pend_sync_rl|lock
         # after : lock|pend_sync_rl|lock|remote_sync_sb
         ################################################################
-        lm.progress_request(trailing_lock=False)
+        lm.advance_request(trailing_lock=False)
 
         ################################################################
         # release lock to allow pend_sync to enter the request loop
@@ -9385,6 +9394,8 @@ class ConfigVerifier:
 
         ################################################################
         # The following are appended to the requestor names:
+        #     _v means request is behind lock in
+        #        _verify_thread_is_current
         #     _s means request is behind lock just before request setup
         #     _r means request is behind lock just before request loop
         #     _e means request is behind lock in error path
@@ -9401,7 +9412,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock
         # action: sync_0a
-        # after : lock|sync_0a_s|lock
+        # after : lock|sync_0a_v|lock
         ################################################################
         sync_0a_serial_num = self.add_cmd(
             Sync(
@@ -9413,11 +9424,18 @@ class ConfigVerifier:
         lm.append_requestor(sync_names[0])
 
         ################################################################
+        # before: lock|sync_0a_v|lock
+        # action: drop lock, sync_0 does verify and wait at setup
+        # after : lock_0|sync_0a_s|lock
+        ################################################################
+        lm.advance_request()
+
+        ################################################################
         # before: lock|sync_0a_s|lock
-        # action: drop lock, sync_0 does setup and wait at req loop
+        # action: drop lock, sync_0 does setup, waits at req loop
         # after : lock_0|sync_0a_r|lock
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
         # before: lock|sync_0a_r|lock
@@ -9456,7 +9474,7 @@ class ConfigVerifier:
         #             smart_start setup
         # after : lock|sync_0a_r|lock|aux_0_s|lock
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
         # before: lock|sync_0a_r|lock|aux_0_s|lock
@@ -9475,7 +9493,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock|sync_0a_r|lock
         # action: sync_1a_s
-        # after : lock|sync_0a_r|lock|sync_1a_s|lock
+        # after : lock|sync_0a_r|lock|sync_1a_v|lock
         ################################################################
         sync_1a_serial_num = self.add_cmd(
             Sync(
@@ -9487,24 +9505,38 @@ class ConfigVerifier:
         lm.append_requestor(sync_names[1])
 
         ################################################################
-        # before: lock|sync_0a_r|lock|sync_1a_s_s|lock
-        # action: swap sync_0 and sync_1a_s
-        # after : lock|sync_1a_s_s|lock|sync_0a_r|lock
+        # before: lock|sync_0a_r|lock|sync_1a_v|lock
+        # action: swap sync_0 and sync_1a_v
+        # after : lock|sync_1a_v|lock|sync_0a_r|lock
         ################################################################
         lm.swap_requestors()
 
         ################################################################
-        # before: lock|sync_1a_s_s|lock|sync_0a_r|lock
-        # action: drop lock, sync_1a_s_s completes setup and gets
-        #             behind lock in req loop
-        # after : lock|sync_0a_r|lock|sync_1a_s_r|lock
+        # before: lock|sync_1a_v|lock|sync_0a_r|lock
+        # action: swap sync_0 and sync_1a_v
+        # after : lock|sync_0a_r|lock||sync_1a_s|lock
         ################################################################
-        lm.progress_request()
+        lm.advance_request()
 
         ################################################################
-        # before: lock|sync_0a_r|lock|sync_1a_s_r|lock
+        # before: lock|sync_0a_r|lock|sync_1a_s|lock
+        # action: swap sync_0 and sync_1a_s
+        # after : lock|sync_1a_s|lock|sync_0a_r|lock
+        ################################################################
+        lm.swap_requestors()
+
+        ################################################################
+        # before: lock|sync_1a_s|lock|sync_0a_r|lock
+        # action: drop lock, sync_1a_s completes setup and gets
+        #             behind lock in req loop
+        # after : lock|sync_0a_r|lock|sync_1a_r|lock
+        ################################################################
+        lm.advance_request()
+
+        ################################################################
+        # before: lock|sync_0a_r|lock|sync_1a_r|lock
         # action: swap sync_0a and sync_1a_s
-        # after : lock|sync_1a_s_r|lock|sync_0a_r|lock
+        # after : lock|sync_1a_r|lock|sync_0a_r|lock
         ################################################################
         lm.swap_requestors()
 
@@ -9521,26 +9553,26 @@ class ConfigVerifier:
         )
 
         ################################################################
-        # before: lock|sync_1a_s_r|lock|sync_0a_r|lock
-        # action: drop lock, sync_1a_s sees sync_0 has zero create
+        # before: lock|sync_1a_r|lock|sync_0a_r|lock
+        # action: drop lock, sync_1a_r sees sync_0 has zero create
         #             time for sync_1, so sync_1 sets sync_0 sync_flag
         #             and loops back to top of req loop to let sync_0
         #             sync up
-        # after : lock|sync_0a_r|lock|sync_1a_s_r
+        # after : lock|sync_0a_r|lock|sync_1a_r
         ################################################################
-        lm.progress_request(trailing_lock=False)
+        lm.advance_request(trailing_lock=False)
 
         ################################################################
-        # before: lock|sync_0a_r|lock|sync_1a_s_r
+        # before: lock|sync_0a_r|lock|sync_1a_r
         # action: drop lock, sync_0 sees that sync_1 is alive and
         #             sets sync_1 sync_flag, sees its sync_flag is
         #             set and completes the sync request
-        # after : lock|sync_1a_s_r
+        # after : lock|sync_1a_r
         ################################################################
         lm.complete_request()
 
         ################################################################
-        # before: lock|sync_1a_s_r
+        # before: lock|sync_1a_r
         # action: drop lock, sync_1 sees sync_0 has set sync_1
         #             sync and completes
         # after : none
@@ -10032,17 +10064,6 @@ class ConfigVerifier:
         lm = LockMgr(config_ver=self, locker_names=locker_names)
 
         ################################################################
-        # msgs to send
-        ################################################################
-
-        ################################################################
-        # tracking vars for locks
-        ################################################################
-        lock_positions: list[str] = []
-        first_cmd_lock_pos: str = ""
-        second_cmd_lock_pos: str = ""
-
-        ################################################################
         # Categorize the request types
         ################################################################
         single_request = False
@@ -10270,6 +10291,11 @@ class ConfigVerifier:
         # in _request_setup where the pk_remotes list is built.
         ################################################################
         if not single_request:
+            ############################################################
+            # before: none
+            # action: get lock
+            # after: lock
+            ############################################################
             lm.get_lock()
 
         ################################################################
@@ -10286,8 +10312,14 @@ class ConfigVerifier:
                 )
             )
             if not single_request:
-                first_cmd_lock_pos = recv_0_name
-                lock_positions.append(recv_0_name)
+                ############################################################
+                # before: lock
+                # action: RecvMsg
+                # after: lock|recv_0_v|lock
+                ############################################################
+                lm.append_requestor(recv_0_name)
+                # first_cmd_lock_pos = recv_0_name
+                # lock_positions.append(recv_0_name)
 
         else:  # must be wait
             cmd_0_serial_num = self.add_cmd(
@@ -10300,51 +10332,56 @@ class ConfigVerifier:
                 )
             )
             if not single_request:
-                first_cmd_lock_pos = wait_0_name
-                lock_positions.append(wait_0_name)
+                ############################################################
+                # before: lock
+                # action: Wait
+                # after: lock|wait_0_v|lock
+                ############################################################
+                lm.append_requestor(wait_0_name)
+                # first_cmd_lock_pos = wait_0_name
+                # lock_positions.append(wait_0_name)
 
         ################################################################
         # Note: in the lock verify comments, the 'a', 'b', 'c', or 'd'
         # chars appended to request_0 and request_1 indicate where the
         # request is positioned along the path:
-        # 'a' means behind the lock in _request_setup where the
-        # pk_remotes list is built
-        # 'b' means behind the lock in _request_loop
-        # 'c' means behind the lock in _request_loop before doing a
-        # refresh pair_array
-        # 'd' means the lock in _cmd_loop (e.g., for del or add)
+        # 'v' means behind the lock in _verify_thread_is_current
+        # 's' means behind the lock in _request_setup
+        # 'r' means behind the lock in _request_loop
+        # 'f' means behind the lock before doing a refresh pair_array
+        # 'c' means the lock in _cmd_loop (e.g., for del or add)
         ################################################################
         ################################################################
         # verify locks held:
         # For 1 request scenarios: no locks held
-        # For all others: lock_0|request_0a
+        # For all others: lock|request_0a
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
         # Get lock 1 to keep the second smart_recv/wait progressing
         # beyond the lock obtain in _request_setup where the pk_remotes
         # list is built.
         ################################################################
-        if not single_request:
-            locker_name = locker_avail_q.pop()
-            self.add_cmd(LockObtain(cmd_runners=locker_name))
-            lock_positions.append(locker_name)
+        # if not single_request:
+        #     locker_name = locker_avail_q.pop()
+        #     self.add_cmd(LockObtain(cmd_runners=locker_name))
+        #     lock_positions.append(locker_name)
 
         ################################################################
         # verify locks held:
         # For 1 request scenarios: no locks held
         # For all others: lock_0|request_0a|lock_1
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
         ################################################################
         # From this point on we will split the scenarios into separate
         # build paths to simplify the lock manipulations
@@ -10361,8 +10398,16 @@ class ConfigVerifier:
                         log_msg="def_del_recv_test_1",
                     )
                 )
-                second_cmd_lock_pos = recv_1_name
-                lock_positions.append(recv_1_name)
+                ########################################################
+                # before: lock|recv_0_v|lock
+                # or:     lock|wait_0_v|lock
+                # action: Wait
+                # after: lock|recv_0_v|lock|recv_1_v|lock
+                # or:    lock|wait_0_v|lock|recv_1_v|lock
+                ########################################################
+                lm.append_requestor(recv_1_name)
+                # second_cmd_lock_pos = recv_1_name
+                # lock_positions.append(recv_1_name)
 
             else:  # must be wait
                 cmd_1_confirmer = wait_1_name
@@ -10375,42 +10420,65 @@ class ConfigVerifier:
                         log_msg="def_del_wait_test_1",
                     )
                 )
-                second_cmd_lock_pos = wait_1_name
-                lock_positions.append(wait_1_name)
+                ########################################################
+                # before: lock|recv_0_v|lock
+                # or:     lock|wait_0_v|lock
+                # action: Wait
+                # after: lock|recv_0_v|lock|wait_1_1_v|lock
+                # or:    lock|wait_0_v|lock|wait_1_1_v|lock
+                ########################################################
+                lm.append_requestor(wait_1_name)
+                # second_cmd_lock_pos = wait_1_name
+                # lock_positions.append(wait_1_name)
+            ############################################################
+            # before: lock|req_0_v|lock|req_1_v|lock
+            # action: drop lock to allow first req to advance to setup
+            # after: lock|req_1_v|lock|req_0_s|lock
+            ############################################################
+            lm.advance_request()
+
+            ############################################################
+            # before: lock|req_1_v|lock|req_0_s|lock
+            # action: drop lock to allow first req to advance to setup
+            # after: lock|req_0_s|lock|req_1_s|lock
+            ############################################################
+            lm.advance_request()
 
             ############################################################
             # complete the build in part a
             ############################################################
             self.build_def_del_scenario_part_a(
                 def_del_scenario=def_del_scenario,
-                lock_positions=lock_positions,
-                first_cmd_lock_pos=first_cmd_lock_pos,
-                second_cmd_lock_pos=second_cmd_lock_pos,
-                locker_names=locker_names,
-                lock_mgr=lm,
+                lm=lm,
             )
         elif del_add_request:
             ############################################################
-            # for del and add, we need to progress request_0 from a to b
+            # for del and add, we need to progress request_0 from v to r
             ############################################################
             ############################################################
             # release lock_0
             ############################################################
-            locker_name = lock_positions.pop(0)
-            locker_avail_q.append(locker_name)
-            self.add_cmd(LockRelease(cmd_runners=locker_name))
+            ############################################################
+            # before: lock|req_0_v|lock
+            # action: drop lock to allow first req to advance to setup
+            # after:  lock|req_0_s|lock
+            ############################################################
+            lm.advance_request()
+            # locker_name = lock_positions.pop(0)
+            # locker_avail_q.append(locker_name)
+            # self.add_cmd(LockRelease(cmd_runners=locker_name))
             # releasing lock 0 will allow the first recv/wait to go and
             # then get behind lock 2
-            lock_positions.remove(first_cmd_lock_pos)
-            lock_positions.append(first_cmd_lock_pos)
+            # lock_positions.remove(first_cmd_lock_pos)
+            # lock_positions.append(first_cmd_lock_pos)
             ############################################################
             # verify locks held: lock_1|request_0b
             ############################################################
-            self.add_cmd(
-                LockVerify(
-                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-                )
-            )
+            # self.add_cmd(
+            #     LockVerify(
+            #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            #     )
+            # )
 
             ############################################################
             # do the del or add request
@@ -10429,8 +10497,14 @@ class ConfigVerifier:
                     join_target_names=[del_names[0]],
                     validate_config=False,
                 )
-                second_cmd_lock_pos = deleter_names[0]
-                lock_positions.append(deleter_names[0])
+                ########################################################
+                # before: lock|req_0_s|lock
+                # action: smart_join
+                # after:  lock|req_0_s|lock|smart_join_v|lock
+                ########################################################
+                lm.append_requestor(deleter_names[0])
+                # second_cmd_lock_pos = deleter_names[0]
+                # lock_positions.append(deleter_names[0])
             else:  # must be add
                 f1_create_items = [
                     F1CreateItem(
@@ -10445,25 +10519,41 @@ class ConfigVerifier:
                     f1_create_items=f1_create_items,
                     validate_config=False,
                 )
-                second_cmd_lock_pos = adder_names[0]
-                lock_positions.append(adder_names[0])
+                ########################################################
+                # before: lock|req_0_s|lock
+                # action: smart_init
+                # after:  lock|req_0_s|lock|smart_init_v|lock
+                ########################################################
+                lm.append_requestor(adder_names[0])
+                # second_cmd_lock_pos = adder_names[0]
+                # lock_positions.append(adder_names[0])
+            ########################################################
+            # before: lock|req_0_s|lock|smart_cmd_v|lock
+            # action: drop lock
+            # after:  lock|smart_cmd_v|lock|req_0_r
+            ########################################################
+            lm.advance_request(trailing_lock=False)
+
+            ########################################################
+            # before: lock|smart_cmd_v|lock|req_0_r
+            # action: drop lock
+            # after:  lock|req_0_r|smart_cmd_c
+            ########################################################
+            lm.advance_request(trailing_lock=False)
+
             ############################################################
             # verify locks held: lock_1|request_0b|request_1b
             ############################################################
-            self.add_cmd(
-                LockVerify(
-                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-                )
-            )
+            # self.add_cmd(
+            #     LockVerify(
+            #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            #     )
+            # )
             ############################################################
             # complete the build in part b
             ############################################################
             self.build_def_del_scenario_part_b(
-                lock_positions=lock_positions,
-                first_cmd_lock_pos=first_cmd_lock_pos,
-                second_cmd_lock_pos=second_cmd_lock_pos,
-                locker_names=locker_names,
-                lock_mgr=lm,
+                lm=lm,
             )
 
         ################################################################
@@ -10508,7 +10598,7 @@ class ConfigVerifier:
         ################################################################
         # verify no locks held
         ################################################################
-        self.add_cmd(LockVerify(cmd_runners=self.commander_name, exp_positions=[]))
+        # self.add_cmd(LockVerify(cmd_runners=self.commander_name, exp_positions=[]))
 
         ################################################################
         # check results
@@ -10534,20 +10624,13 @@ class ConfigVerifier:
     def build_def_del_scenario_part_a(
         self,
         def_del_scenario: DefDelScenario,
-        lock_positions: list[str],
-        first_cmd_lock_pos: str,
-        second_cmd_lock_pos: str,
-        locker_names: list[str],
-        lock_mgr: LockMgr,
+        lm: LockMgr,
     ) -> None:
         """Add ConfigCmd items for a deferred delete.
 
         Args:
             def_del_scenario: specifies type of test to do
-            lock_positions: ordered list of requests waiting on lock
-            first_cmd_lock_pos: either recv or wait as request_0
-            second_cmd_lock_pos: either recv or wait as request_1
-            lock_mgr: lock manager class
+            lm: lock manager class
 
         """
         ################################################################
@@ -10558,167 +10641,190 @@ class ConfigVerifier:
         ################################################################
         # verify locks held: lock_0|request_0a|lock_1|request_1a
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
         # Get lock 2 to keep the first smart_recv/wait from progressing
         # beyond the lock obtain in _request_loop.
         ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
+        # locker_name = locker_avail_q.pop()
+        # self.add_cmd(LockObtain(cmd_runners=locker_name))
+        # lock_positions.append(locker_name)
 
         ################################################################
         # verify locks held: lock_0|request_0a|lock_1|request_1a|lock_2
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
-        # release lock 0 to allow first smart_recv/wait to progress
-        # to the lock obtain in _request_loop
+        # before: lock|request_0a|lock|request_1a|lock
+        # action: release lock to allow first smart_recv/wait to
+        #         progress to the lock obtain in _request_loop
+        # after:  lock|request_1a_s|lock|request_0a_r|lock
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
+        lm.advance_request()
+        # locker_name = lock_positions.pop(0)
+        # locker_avail_q.append(locker_name)
+        # self.add_cmd(LockRelease(cmd_runners=locker_name))
         # releasing lock 0 will allow the first recv/wait to go and then
         # get behind lock 2
-        lock_positions.remove(first_cmd_lock_pos)
-        lock_positions.append(first_cmd_lock_pos)
+        # lock_positions.remove(first_cmd_lock_pos)
+        # lock_positions.append(first_cmd_lock_pos)
 
         ################################################################
         # verify locks held: lock_1|request_1a|lock_2|request_0b
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
         # get lock 3 to keep second smart_recv/wait behind first
         ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
+        # locker_name = locker_avail_q.pop()
+        # self.add_cmd(LockObtain(cmd_runners=locker_name))
+        # lock_positions.append(locker_name)
 
         ################################################################
         # verify locks held: lock_1|request_1a|lock_2|request_0b|lock_3
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
-        # release lock 1 to allow second smart_recv/wait to progress.
-        # For smart_recv/wait, to the lock obtain in _request_loop.
-        ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        self.add_cmd(LockRelease(cmd_runners=locker_name))
 
-        lock_positions.remove(second_cmd_lock_pos)
-        lock_positions.append(second_cmd_lock_pos)
+        ################################################################
+        ################################################################
+        # before: lock|request_1a_s|lock|request_0a_r|lock
+        # action: release lock to allow second smart_recv/wait to
+        #         progress to the lock obtain in _request_loop.
+        # after:  lock|request_0a_r|lock|request_1a_r|lock
+        ################################################################
+        lm.advance_request()
+        # locker_name = lock_positions.pop(0)
+        # locker_avail_q.append(locker_name)
+        # self.add_cmd(LockRelease(cmd_runners=locker_name))
+        #
+        # lock_positions.remove(second_cmd_lock_pos)
+        # lock_positions.append(second_cmd_lock_pos)
 
         ################################################################
         # verify locks held: lock_2|request_0b|lock_3|request_1b
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
         # get lock 4 to freeze first and second smart_recv/wait just
         # before the refresh so we can swap lock positions (if needed)
         ################################################################
-        locker_name = locker_avail_q.pop()
-        self.add_cmd(LockObtain(cmd_runners=locker_name))
-        lock_positions.append(locker_name)
+        # locker_name = locker_avail_q.pop()
+        # self.add_cmd(LockObtain(cmd_runners=locker_name))
+        # lock_positions.append(locker_name)
 
         ################################################################
         # verify locks held: lock_2|request_0b|lock_3|request_1b|lock_4
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
         # release lock_2 to allow first smart_recv/wait to go
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        release_lock_serial_num_2 = self.add_cmd(LockRelease(cmd_runners=locker_name))
+        ################################################################
+        # before: lock|request_0a_r|lock|request_1a_r|lock
+        # action: release lock to allow first smart_recv/wait to
+        #         progress to the lock obtain before refresh.
+        # after:  lock|request_1a_r|lock|request_0a_f|lock
+        ################################################################
+        lm.advance_request()
+        # locker_name = lock_positions.pop(0)
+        # locker_avail_q.append(locker_name)
+        # release_lock_serial_num_2 = self.add_cmd(LockRelease(cmd_runners=locker_name))
 
         # releasing lock_2 will allow the first recv/wait to go
-        lock_positions.remove(first_cmd_lock_pos)
+        # lock_positions.remove(first_cmd_lock_pos)
 
         # the first recv/wait will now get behind the last lock, but
         # only for those cases that involve the deferred delete which
         # this routine handles
-        lock_positions.append(first_cmd_lock_pos)
+        # lock_positions.append(first_cmd_lock_pos)
 
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd="LockRelease",
-                confirm_serial_num=release_lock_serial_num_2,
-                confirmers=locker_name,
-            )
-        )
+        # self.add_cmd(
+        #     ConfirmResponse(
+        #         cmd_runners=[self.commander_name],
+        #         confirm_cmd="LockRelease",
+        #         confirm_serial_num=release_lock_serial_num_2,
+        #         confirmers=locker_name,
+        #     )
+        # )
 
         ################################################################
         # verify locks held: lock_3|request_1b|lock_4|request_0c
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
         # release lock_3 to allow second smart_recv/wait to go
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        release_lock_serial_num_3 = self.add_cmd(LockRelease(cmd_runners=locker_name))
+        ################################################################
+        # before: lock|request_1a_r|lock|request_0a_f|lock
+        # action: release lock to allow second smart_recv/wait to
+        #         progress to the lock obtain before refresh.
+        # after:  lock|request_0a_f|lock|request_1a_f
+        ################################################################
+        lm.advance_request(trailing_lock=False)
+        # locker_name = lock_positions.pop(0)
+        # locker_avail_q.append(locker_name)
+        # release_lock_serial_num_3 = self.add_cmd(LockRelease(cmd_runners=locker_name))
 
         # releasing the second lock will allow the second recv/wait to
         # go and then get the lock exclusive behind the last lock waiter
-        lock_positions.remove(second_cmd_lock_pos)
+        # lock_positions.remove(second_cmd_lock_pos)
 
         # recv, wait will get behind the 3rd lock
-        lock_positions.append(second_cmd_lock_pos)
+        # lock_positions.append(second_cmd_lock_pos)
 
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd="LockRelease",
-                confirm_serial_num=release_lock_serial_num_3,
-                confirmers=locker_name,
-            )
-        )
+        # self.add_cmd(
+        #     ConfirmResponse(
+        #         cmd_runners=[self.commander_name],
+        #         confirm_cmd="LockRelease",
+        #         confirm_serial_num=release_lock_serial_num_3,
+        #         confirmers=locker_name,
+        #     )
+        # )
 
         ################################################################
         # verify locks held: lock_4|request_0c|request_1c
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
         # At this point we will have the first cmd behind lock_4 and
@@ -10729,67 +10835,83 @@ class ConfigVerifier:
             def_del_scenario == DefDelScenario.Recv1Recv0
             or def_del_scenario == DefDelScenario.Wait1Wait0
         ):
-            lock_pos_1 = lock_positions[1]
-            lock_positions[1] = lock_positions[2]
-            lock_positions[2] = lock_pos_1
+            ############################################################
+            # before: lock|request_0a_f|lock|request_1a_f
+            # action: swap request positions
+            # after:  lock|request_1a_f|lock|request_0a_f
+            ############################################################
+            lm.swap_requestors()
+            # lock_pos_1 = lock_positions[1]
+            # lock_positions[1] = lock_positions[2]
+            # lock_positions[2] = lock_pos_1
 
             # assert lock_positions[0] == locker_names[4]
             # assert lock_positions[1] == second_cmd_lock_pos
             # assert lock_positions[2] == first_cmd_lock_pos
 
-            self.add_cmd(
-                LockSwap(
-                    cmd_runners=self.commander_name, new_positions=lock_positions.copy()
-                )
-            )
+            # self.add_cmd(
+            #     LockSwap(
+            #         cmd_runners=self.commander_name, new_positions=lock_positions.copy()
+            #     )
+            # )
 
             ############################################################
             # verify locks held: lock_4|request_1c|request_0c
             ############################################################
-            self.add_cmd(
-                LockVerify(
-                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-                )
-            )
+            # self.add_cmd(
+            #     LockVerify(
+            #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+            #     )
+            # )
 
         ################################################################
         # release lock_4 to allow both smart_recv/wait to refresh
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        release_lock_serial_num_4 = self.add_cmd(LockRelease(cmd_runners=locker_name))
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd="LockRelease",
-                confirm_serial_num=release_lock_serial_num_4,
-                confirmers=locker_name,
-            )
-        )
+        ################################################################
+        # before: lock|request_0a_f|lock|request_1a_f
+        # or:     lock|request_1a_f|lock|request_0a_f
+        # action: release lock to allow smart_recv/wait to refresh
+        # after:  lock|request_1a_f
+        # or:     lock|request_0a_f
+        ################################################################
+        lm.complete_request()
+        # locker_name = lock_positions.pop(0)
+        # locker_avail_q.append(locker_name)
+        # release_lock_serial_num_4 = self.add_cmd(LockRelease(cmd_runners=locker_name))
+        # self.add_cmd(
+        #     ConfirmResponse(
+        #         cmd_runners=[self.commander_name],
+        #         confirm_cmd="LockRelease",
+        #         confirm_serial_num=release_lock_serial_num_4,
+        #         confirmers=locker_name,
+        #     )
+        # )
 
-        lock_positions.remove(first_cmd_lock_pos)
-        lock_positions.remove(second_cmd_lock_pos)
-
+        # lock_positions.remove(first_cmd_lock_pos)
+        # lock_positions.remove(second_cmd_lock_pos)
+        ################################################################
+        # before:  lock|request_1a_f
+        # or:      lock|request_0a_f
+        # action: release lock to allow final smart_recv/wait to refresh
+        # after:  none
+        ################################################################
+        lm.complete_request()
         ################################################################
         # verify locks held: no locks held
         ################################################################
-        assert not lock_positions
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # assert not lock_positions
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
     ####################################################################
     # build_def_del_scenario_part_b
     ####################################################################
     def build_def_del_scenario_part_b(
         self,
-        lock_positions: list[str],
-        first_cmd_lock_pos: str,
-        second_cmd_lock_pos: str,
-        locker_names: list[str],
-        lock_mgr: LockMgr,
+        lm: LockMgr,
     ) -> None:
         """Add ConfigCmd items for a deferred delete.
 
@@ -10797,7 +10919,7 @@ class ConfigVerifier:
             lock_positions: ordered list of requests waiting on lock
             first_cmd_lock_pos: either recv or wait as request_0
             second_cmd_lock_pos: either add or del as request_1
-            lock_mgr: lock manager
+            lm: lock manager
 
         """
         ################################################################
@@ -10809,42 +10931,47 @@ class ConfigVerifier:
         ################################################################
         # verify locks held: lock_1|request_0b|request_1b
         ################################################################
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
         ################################################################
-        # release lock 1 to allow request_0 to progress to doing the
-        # refresh which means the del or add request will proceed and
-        # do the refresh ahead of request_0
         ################################################################
-        locker_name = lock_positions.pop(0)
-        locker_avail_q.append(locker_name)
-        release_lock_serial_num_1 = self.add_cmd(LockRelease(cmd_runners=locker_name))
-
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd="LockRelease",
-                confirm_serial_num=release_lock_serial_num_1,
-                confirmers=locker_name,
-            )
-        )
-
-        lock_positions.remove(first_cmd_lock_pos)
-        lock_positions.remove(second_cmd_lock_pos)
+        ################################################################
+        # before:  lock|req_0_r|smart_cmd_c
+        # action: release lock to allow request_0 to progress to doing
+        #         the refresh which means the del or add request will
+        #         proceed and do the refresh ahead of request_0 ???
+        # after:  none
+        ################################################################
+        lm.complete_request(free_all=True)
+        # locker_name = lock_positions.pop(0)
+        # locker_avail_q.append(locker_name)
+        # release_lock_serial_num_1 = self.add_cmd(LockRelease(cmd_runners=locker_name))
+        #
+        # self.add_cmd(
+        #     ConfirmResponse(
+        #         cmd_runners=[self.commander_name],
+        #         confirm_cmd="LockRelease",
+        #         confirm_serial_num=release_lock_serial_num_1,
+        #         confirmers=locker_name,
+        #     )
+        # )
+        #
+        # lock_positions.remove(first_cmd_lock_pos)
+        # lock_positions.remove(second_cmd_lock_pos)
 
         ################################################################
         # verify locks held: no locks held
         ################################################################
-        assert not lock_positions
-        self.add_cmd(
-            LockVerify(
-                cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
-            )
-        )
+        # assert not lock_positions
+        # self.add_cmd(
+        #     LockVerify(
+        #         cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+        #     )
+        # )
 
     ####################################################################
     # build_recv_msg_timeout_suite
@@ -23361,8 +23488,8 @@ class ConfigVerifier:
         # get first smart_recv log msg
         ################################################################
         search_msg = (
-            rf"{receiver_names[0]} \({group_name}\) smart_recv received [0-9]+ "
-            f"msg[s]* from {sender_names[0]}"
+            rf"SmartThread {receiver_names[0]} \({group_name}\) smart_recv "
+            f"received [0-9]+ msg[s]* from {sender_names[0]}"
         )
 
         recv_0_log_msg, recv_0_log_pos = self.get_log_msg(
@@ -23389,8 +23516,8 @@ class ConfigVerifier:
         # get second smart_recv log msg
         ################################################################
         search_msg = (
-            rf"{receiver_names[1]} \({group_name}\) smart_recv received [0-9]+ "
-            f"msg[s]* from {sender_names[0]}"
+            rf"SmartThread {receiver_names[1]} \({group_name}\) smart_recv "
+            f"received [0-9]+ msg[s]* from {sender_names[0]}"
         )
 
         recv_1_log_msg, recv_1_log_pos = self.get_log_msg(
@@ -23416,8 +23543,8 @@ class ConfigVerifier:
         # get first wait log msg
         ################################################################
         search_msg = (
-            rf"{waiter_names[0]} \({group_name}\) smart_wait resumed by "
-            f"{resumer_names[0]}"
+            rf"SmartThread {waiter_names[0]} \({group_name}\) smart_wait "
+            f"resumed by {resumer_names[0]}"
         )
 
         wait_0_log_msg, wait_0_log_pos = self.get_log_msg(
@@ -23444,8 +23571,8 @@ class ConfigVerifier:
         # get second wait log msg
         ################################################################
         search_msg = (
-            rf"{waiter_names[1]} \({group_name}\) smart_wait resumed by "
-            f"{resumer_names[0]}"
+            rf"SmartThread {waiter_names[1]} \({group_name}\) smart_wait "
+            f"resumed by {resumer_names[0]}"
         )
 
         wait_1_log_msg, wait_1_log_pos = self.get_log_msg(
@@ -24892,14 +25019,16 @@ class ConfigVerifier:
                     name0=deleted_name, name1=def_del_name
                 )
                 search_msg1 = (
-                    rf"{cmd_runner} \({group_name}\) removed status_blocks entry for "
+                    rf"SmartThread {cmd_runner} \({group_name}\) removed "
+                    "status_blocks entry for "
                     rf"PairKey\(name0='{pair_key[0]}', "
                     rf"name1='{pair_key[1]}'\), "
                     f"name = {def_del_name}"
                 )
 
                 search_msg2 = (
-                    rf"{cmd_runner} \({group_name}\) removed _pair_array entry for "
+                    rf"SmartThread {cmd_runner} \({group_name}\) removed "
+                    "_pair_array entry for "
                     rf"PairKey\(name0='{pair_key[0]}', "
                     rf"name1='{pair_key[1]}'\)"
                 )
@@ -24930,8 +25059,8 @@ class ConfigVerifier:
         # get updated pair array log msg
         ################################################################
         search_msg = (
-            rf"{cmd_runner} \({group_name}\) did cleanup of _pair_array at "
-            f"UTC {time_match}"
+            rf"SmartThread {cmd_runner} \({group_name}\) did cleanup of "
+            f"_pair_array at UTC {time_match}"
         )
 
         log_msg, log_pos = self.get_log_msg(
