@@ -32652,8 +32652,55 @@ class TestSmartThreadErrors:
 # TestSmartThreadScenarios class
 ########################################################################
 @pytest.mark.cover
-class TestSmartBasicScenarios:
-    """Test class for SmartThread scenarios."""
+class TestSmartThreadConfigScenarios:
+    """Test class for SmartThread configurations scenarios."""
+
+    ####################################################################
+    # test_unreg_scenarios
+    ####################################################################
+    # @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
+    def test_unreg_scenario(self):
+        """Test unregister scenarios."""
+
+        def f1(smart_thread: st.SmartThread) -> None:
+            """Target for beta."""
+            logger.debug(f"f1 entry: {smart_thread.name=}")
+
+            smart_thread.smart_resume(waiters="alpha")
+            wait_event.wait()
+
+            logger.debug(f"f1 exit: {smart_thread.name=}")
+
+        logger.debug(f"mainline entry")
+        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
+        alpha_smart_thread.smart_unreg()
+
+        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
+        beta_smart_thread = st.SmartThread(
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            auto_start=False,
+            thread_parm_name="smart_thread",
+        )
+        beta_smart_thread.smart_unreg()
+
+        wait_event = threading.Event()
+        beta_smart_thread = st.SmartThread(
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
+        )
+        alpha_smart_thread.smart_wait(resumers="beta")
+
+        alpha_smart_thread.smart_unreg(targets="beta")
+
+        wait_event.set()
+
+        beta_smart_thread.thread.join()
+
+        logger.debug(f"mainline exit")
 
     ####################################################################
     # test_config_build_scenarios
@@ -32706,6 +32753,14 @@ class TestSmartBasicScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
         )
+
+
+########################################################################
+# TestSmartBasicScenarios
+########################################################################
+@pytest.mark.cover
+class TestSmartBasicScenarios:
+    """Test class for SmartThread scenarios."""
 
     ####################################################################
     # test_get_current_smart_thread
