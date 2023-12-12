@@ -18179,6 +18179,12 @@ class ConfigVerifier:
             exp_names_true_state: set[str] = set()
             exp_names_not_true_state: set[str] = set()
 
+            if not states:
+                exp_names_true_state = registered_names | alive_names | stopped_names
+                exp_names_not_true_state = (
+                    registered_names | alive_names | stopped_names
+                )
+
             if st.ThreadState.Registered in states:
                 exp_names_true_state |= registered_names
                 exp_names_not_true_state |= registered_names
@@ -18189,28 +18195,35 @@ class ConfigVerifier:
             # true_state is False, and Stopped if true_state is True
             if st.ThreadState.Alive in states:
                 exp_names_true_state |= alive_names
-                exp_names_not_true_state |= alive_names
+                exp_names_not_true_state |= alive_names | stopped_names
 
             # stopped threads have state == Alive and is_alive()==False
             # which means their state is considered to be Alive if
             # true_state is False, and Stopped if true_state is True
             if st.ThreadState.Stopped in states:
-                exp_names_not_true_state |= stopped_names
+                exp_names_true_state |= stopped_names
+                # exp_names_not_true_state |= stopped_names
 
             assert (
                 st.SmartThread.get_smart_thread_names(
                     group_name=self.group_name, states=states
                 )
-                == exp_names
+                == exp_names_true_state
             )
 
-            assert st.SmartThread.get_smart_thread_names(
-                group_name=self.group_name, true_state=True
-            ) == (registered_names | alive_names | stopped_names)
+            assert (
+                st.SmartThread.get_smart_thread_names(
+                    group_name=self.group_name, states=states, true_state=True
+                )
+                == exp_names_true_state
+            )
 
-            assert st.SmartThread.get_smart_thread_names(
-                group_name=self.group_name, true_state=False
-            ) == (registered_names | alive_names | stopped_names)
+            assert (
+                st.SmartThread.get_smart_thread_names(
+                    group_name=self.group_name, states=states, true_state=False
+                )
+                == exp_names_not_true_state
+            )
 
             self.log_test_msg(
                 f"handle_get_smart_thread_names exit: {cmd_runner=}, {registered_names=}, "
