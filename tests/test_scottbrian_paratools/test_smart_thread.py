@@ -2533,6 +2533,50 @@ class VerifyCounts(ConfigCmd):
 
 
 ########################################################################
+# VerifyCounts
+########################################################################
+class VerifyGetSmartThreadNames(ConfigCmd):
+    """Verify the number of threads at various states in the config."""
+
+    def __init__(
+        self,
+        cmd_runners: Iterable[str],
+        registered_names: Optional[Iterable[str]] = None,
+        alive_names: Optional[Iterable[str]] = None,
+        stopped_names: Optional[Iterable[str]] = None,
+    ) -> None:
+        """Initialize the instance.
+
+        Args:
+            cmd_runners: thread names that will execute the command
+            registered_names: names of threads that are registered
+            alive_names: names of threads that are alive
+            stopped_names: names of threads that are stopped
+        """
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+        self.registered_names = get_set(registered_names)
+        self.alive_names = get_set(alive_names)
+        self.stopped_names = get_set(stopped_names)
+
+        self.arg_list += ["registered_names", "alive_names", "stopped_names"]
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.handle_get_smart_thread_names(
+            cmd_runner=cmd_runner,
+            registered_names=self.registered_names,
+            alive_names=self.alive_names,
+            stopped_names=self.stopped_names,
+        )
+
+
+########################################################################
 # VerifyDefDel
 ########################################################################
 class VerifyDefDel(ConfigCmd):
@@ -5967,6 +6011,41 @@ class ConfigVerifier:
             log_level=log_level,
             log_msg=new_log_msg,
             fullmatch=fullmatch,
+        )
+
+    ####################################################################
+    # build_get_smart_thread_names_scenario
+    ####################################################################
+    def build_get_smart_thread_names_scenario(
+        self,
+        num_reg: int,
+        num_alive: int,
+        num_stopped: int,
+    ):
+        """Test get_smart_thread_names scenarios.
+
+        Args:
+            num_reg: num threads in registered state
+            num_alive: num threads in alive state
+            num_stopped: num threads in stopped state
+        """
+        reg_names = get_names("reg_", num_reg)
+        alive_names = get_names("alive_", num_alive)
+        stopped_names = get_names("stopped_", num_stopped)
+
+        self.create_config(
+            reg_names=reg_names,
+            active_names=alive_names,
+            stopped_names=stopped_names,
+        )
+
+        self.add_cmd(
+            VerifyGetSmartThreadNames(
+                cmd_runners=self.commander_name,
+                registered_names=reg_names,
+                alive_names=alive_names | {self.commander_name},
+                stopped_names=stopped_names,
+            )
         )
 
     ####################################################################
@@ -11182,11 +11261,27 @@ class ConfigVerifier:
         for actor in actor_list:
             actions[actor](waiter_names=waiter_names, actor_names=actor_names)
 
+    # ####################################################################
+    # # powerset
+    # ####################################################################
+    # @staticmethod
+    # def powerset(names: list[str]) -> chain[tuple[str, ...]]:
+    #     """Returns a generator powerset of the input list of names.
+    #
+    #     Args:
+    #         names: names to use to make a powerset
+    #
+    #     """
+    #     # powerset([1,2,3]) -->
+    #     # () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+    #     return chain.from_iterable(
+    #         combinations(names, r) for r in range(len(names) + 1)
+    #     )
     ####################################################################
     # powerset
     ####################################################################
     @staticmethod
-    def powerset(names: list[str]) -> chain[tuple[str, ...]]:
+    def powerset(names: list[Any]) -> chain[tuple[Any, ...]]:
         """Returns a generator powerset of the input list of names.
 
         Args:
@@ -18034,6 +18129,95 @@ class ConfigVerifier:
             )
 
     ####################################################################
+    # handle_did_clean_reg_log_msg
+    ####################################################################
+    def handle_get_smart_thread_names(
+        self,
+        cmd_runner: str,
+        registered_names: set[str],
+        alive_names: set[str],
+        stopped_names: set[str],
+    ) -> None:
+        """Handle the did cleanup of registry log message.
+
+        Args:
+            cmd_runner: thread name that is to do get_smart_thread_names
+            registered_names: names of threads that are registered
+            alive_names: names of threads that are alive
+            stopped_names: names of threads that are stopped
+
+        """
+        self.log_test_msg(
+            f"handle_get_smart_thread_names entry: {cmd_runner=}, {registered_names=}, "
+            f"{alive_names=}, {stopped_names=}"
+        )
+
+        ################################################################
+        # Test with no filter
+        ################################################################
+        assert st.SmartThread.get_smart_thread_names(group_name=self.group_name) == (
+            registered_names | alive_names | stopped_names
+        )
+
+        assert st.SmartThread.get_smart_thread_names(
+            group_name=self.group_name, true_state=True
+        ) == (registered_names | alive_names | stopped_names)
+
+        assert st.SmartThread.get_smart_thread_names(
+            group_name=self.group_name, true_state=False
+        ) == (registered_names | alive_names | stopped_names)
+
+        ################################################################
+        # Test with filter
+        ################################################################
+        states_list = [
+            st.ThreadState.Registered,
+            st.ThreadState.Alive,
+            st.ThreadState.Stopped,
+        ]
+        for states in self.powerset(states_list.copy()):
+            exp_names_true_state: set[str] = set()
+            exp_names_not_true_state: set[str] = set()
+
+            if st.ThreadState.Registered in states:
+                exp_names_true_state |= registered_names
+                exp_names_not_true_state |= registered_names
+
+            # alive threads have state == Alive and is_alive() == True
+            # stopped threads have state == Alive and is_alive()==False
+            # which means their state is considered to be Alive if
+            # true_state is False, and Stopped if true_state is True
+            if st.ThreadState.Alive in states:
+                exp_names_true_state |= alive_names
+                exp_names_not_true_state |= alive_names
+
+            # stopped threads have state == Alive and is_alive()==False
+            # which means their state is considered to be Alive if
+            # true_state is False, and Stopped if true_state is True
+            if st.ThreadState.Stopped in states:
+                exp_names_not_true_state |= stopped_names
+
+            assert (
+                st.SmartThread.get_smart_thread_names(
+                    group_name=self.group_name, states=states
+                )
+                == exp_names
+            )
+
+            assert st.SmartThread.get_smart_thread_names(
+                group_name=self.group_name, true_state=True
+            ) == (registered_names | alive_names | stopped_names)
+
+            assert st.SmartThread.get_smart_thread_names(
+                group_name=self.group_name, true_state=False
+            ) == (registered_names | alive_names | stopped_names)
+
+            self.log_test_msg(
+                f"handle_get_smart_thread_names exit: {cmd_runner=}, {registered_names=}, "
+                f"{alive_names=}, {stopped_names=}"
+            )
+
+    ####################################################################
     # handle_join
     ####################################################################
     def handle_join(
@@ -20856,7 +21040,7 @@ class ConfigVerifier:
 
             if not cmd.cmd_runners:
                 raise InvalidInputDetected(
-                    "main_driver detected an empty " "set of cmd_runners"
+                    "main_driver detected an empty set of cmd_runners"
                 )
             for name in cmd.cmd_runners:
                 if name == self.commander_name:
@@ -32649,118 +32833,64 @@ class TestSmartThreadErrors:
 
 
 ########################################################################
-# TestSmartThreadScenarios class
+# TestSmartThreadRtns
 ########################################################################
 @pytest.mark.cover
-class TestSmartThreadConfigScenarios:
+class TestSmartThreadRtns:
     """Test class for SmartThread configurations scenarios."""
 
     ####################################################################
-    # test_unreg_scenarios
+    # test_get_smart_thread_names_scenario
     ####################################################################
-    # @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
-    def test_unreg_scenario(self):
-        """Test unregister scenarios."""
-
-        def f1(smart_thread: st.SmartThread) -> None:
-            """Target for beta."""
-            logger.debug(f"f1 entry: {smart_thread.name=}")
-
-            smart_thread.smart_resume(waiters="alpha")
-            wait_event.wait()
-
-            logger.debug(f"f1 exit: {smart_thread.name=}")
-
-        logger.debug(f"mainline entry")
-        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
-        alpha_smart_thread.smart_unreg()
-
-        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
-        beta_smart_thread = st.SmartThread(
-            group_name="test1",
-            name="beta",
-            target_rtn=f1,
-            auto_start=False,
-            thread_parm_name="smart_thread",
-        )
-        beta_smart_thread.smart_unreg()
-
-        wait_event = threading.Event()
-        beta_smart_thread = st.SmartThread(
-            group_name="test1",
-            name="beta",
-            target_rtn=f1,
-            thread_parm_name="smart_thread",
-        )
-        alpha_smart_thread.smart_wait(resumers="beta")
-
-        alpha_smart_thread.smart_unreg(targets="beta")
-
-        wait_event.set()
-
-        beta_smart_thread.thread.join()
-
-        logger.debug(f"mainline exit")
-
-    ####################################################################
-    # test_config_build_scenarios
-    ####################################################################
-    @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_active_1_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_stopped_1_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_registered_2_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_active_2_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_stopped_2_arg", [0, 1, 2])
-    def test_config_build_scenarios(
+    @pytest.mark.parametrize("num_reg_0_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_alive_0_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stopped_0_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_reg_1_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_alive_1_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stopped_1_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_reg_2_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_alive_2_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stopped_2_arg", [0, 1, 2])
+    def test_get_smart_thread_names_scenario(
         self,
-        num_registered_1_arg: int,
-        num_active_1_arg: int,
-        num_stopped_1_arg: int,
-        num_registered_2_arg: int,
-        num_active_2_arg: int,
-        num_stopped_2_arg: int,
+        num_reg_0_arg: int,
+        num_alive_0_arg: int,
+        num_stopped_0_arg: int,
         caplog: pytest.LogCaptureFixture,
+        # num_reg_1_arg: int,
+        # num_alive_1_arg: int,
+        # num_stopped_1_arg: int,
+        # num_reg_2_arg: int,
+        # num_alive_2_arg: int,
+        # num_stopped_2_arg: int,
     ) -> None:
-        """Test meta configuration scenarios.
+        """Test unregister scenarios.
 
         Args:
-            num_registered_1_arg: number of threads to initially build
-                as registered
-            num_active_1_arg: number of threads to initially build as
-                active
-            num_stopped_1_arg: number of threads to initially build as
-                stopped
-            num_registered_2_arg: number of threads to reconfigure as
-                registered
-            num_active_2_arg: number of threads to reconfigure as
-                active
-            num_stopped_2_arg: number of threads to reconfigure as
-                stopped
+            num_reg_0_arg: num group0 threads in registered state
+            num_alive_0_arg: num group0 threads in alive state
+            num_stopped_0_arg:num group0 threads in stopped state
+            num_reg_1_arg:num group0 threads in registered state
+            num_alive_1_arg:num group0 threads in registered state
+            num_stopped_1_arg:num group0 threads in registered state
+            num_reg_2_arg:num group0 threads in registered state
+            num_alive_2_arg:num group0 threads in registered state
+            num_stopped_2_arg:num group0 threads in registered state
             caplog: pytest fixture to capture log output
 
         """
+
         args_for_scenario_builder: dict[str, Any] = {
-            "num_registered_1": num_registered_1_arg,
-            "num_active_1": num_active_1_arg,
-            "num_stopped_1": num_stopped_1_arg,
-            "num_registered_2": num_registered_2_arg,
-            "num_active_2": num_active_2_arg,
-            "num_stopped_2": num_stopped_2_arg,
+            "num_reg": num_reg_0_arg,
+            "num_alive": num_alive_0_arg,
+            "num_stopped": num_stopped_0_arg,
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_config_build_suite,
+            scenario_builder=ConfigVerifier.build_get_smart_thread_names_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
         )
-
-
-########################################################################
-# TestSmartBasicScenarios
-########################################################################
-@pytest.mark.cover
-class TestSmartBasicScenarios:
-    """Test class for SmartThread scenarios."""
 
     ####################################################################
     # test_get_current_smart_thread
@@ -32852,9 +32982,10 @@ class TestSmartBasicScenarios:
         st.SmartThread(group_name="test1", name="charlie", target_rtn=f2)
         alpha_smart_thread.smart_join(targets="charlie")
 
-    ####################################################################
-    # test_get_current_smart_thread
-    ####################################################################
+        ####################################################################
+        # test_get_current_smart_thread
+        ####################################################################
+
     @pytest.mark.parametrize(
         "group_names_arg",
         [
@@ -33015,6 +33146,121 @@ class TestSmartBasicScenarios:
             alpha_smart_thread.smart_join(targets=active_names | reg_names)
 
         logger.debug("mainline exiting")
+
+
+########################################################################
+# TestSmartThreadScenarios class
+########################################################################
+@pytest.mark.cover
+class TestSmartThreadConfigScenarios:
+    """Test class for SmartThread configurations scenarios."""
+
+    ####################################################################
+    # test_unreg_scenarios
+    ####################################################################
+    # @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
+    def test_unreg_scenario(self):
+        """Test unregister scenarios."""
+
+        def f1(smart_thread: st.SmartThread) -> None:
+            """Target for beta."""
+            logger.debug(f"f1 entry: {smart_thread.name=}")
+
+            smart_thread.smart_resume(waiters="alpha")
+            wait_event.wait()
+
+            logger.debug(f"f1 exit: {smart_thread.name=}")
+
+        logger.debug(f"mainline entry")
+        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
+        alpha_smart_thread.smart_unreg()
+
+        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
+        beta_smart_thread = st.SmartThread(
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            auto_start=False,
+            thread_parm_name="smart_thread",
+        )
+        beta_smart_thread.smart_unreg()
+
+        wait_event = threading.Event()
+        beta_smart_thread = st.SmartThread(
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
+        )
+        alpha_smart_thread.smart_wait(resumers="beta")
+
+        alpha_smart_thread.smart_unreg(targets="beta")
+
+        wait_event.set()
+
+        beta_smart_thread.thread.join()
+
+        logger.debug(f"mainline exit")
+
+    ####################################################################
+    # test_config_build_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_active_1_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_stopped_1_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_2_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_active_2_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_stopped_2_arg", [0, 1, 2])
+    def test_config_build_scenarios(
+        self,
+        num_registered_1_arg: int,
+        num_active_1_arg: int,
+        num_stopped_1_arg: int,
+        num_registered_2_arg: int,
+        num_active_2_arg: int,
+        num_stopped_2_arg: int,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_registered_1_arg: number of threads to initially build
+                as registered
+            num_active_1_arg: number of threads to initially build as
+                active
+            num_stopped_1_arg: number of threads to initially build as
+                stopped
+            num_registered_2_arg: number of threads to reconfigure as
+                registered
+            num_active_2_arg: number of threads to reconfigure as
+                active
+            num_stopped_2_arg: number of threads to reconfigure as
+                stopped
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            "num_registered_1": num_registered_1_arg,
+            "num_active_1": num_active_1_arg,
+            "num_stopped_1": num_stopped_1_arg,
+            "num_registered_2": num_registered_2_arg,
+            "num_active_2": num_active_2_arg,
+            "num_stopped_2": num_stopped_2_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_config_build_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+        )
+
+
+########################################################################
+# TestSmartBasicScenarios
+########################################################################
+@pytest.mark.cover
+class TestSmartBasicScenarios:
+    """Test class for SmartThread scenarios."""
 
     ####################################################################
     # test_multiple_groups

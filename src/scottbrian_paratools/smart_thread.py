@@ -1157,15 +1157,23 @@ class SmartThread:
         return ret_names
 
     ####################################################################
-    # get_active_names
+    # get_smart_thread_names
     ####################################################################
     @staticmethod
-    def get_smart_thread_names(group_name: str, state: ThreadState) -> set[str]:
+    def get_smart_thread_names(
+        group_name: str,
+        states: Optional[Iterable[ThreadState]] = None,
+        true_state: bool = True,
+    ) -> set[str]:
         """Get the smart thread names for given state.
 
         Args:
             group_name: name of group to search
-            state: state to check for
+            states: states to check for
+            true_state: if True, a SmartThread that has
+                a ThreadState of Active will be considered to have a
+                state of Stopped if the threading is_alive method
+                indicates that the thread is not alive.
 
         Returns:
              A (possibly empty) set of thread names.
@@ -1177,9 +1185,20 @@ class SmartThread:
                 inner_reg = SmartThread._registry[group_name].registry
                 with sel.SELockShare(SmartThread._registry[group_name].registry_lock):
                     for name, smart_thread in inner_reg.items():
-                        if smart_thread.st_state == state:
+                        if not states:
                             ret_names |= {name}
+                        else:
+                            if (
+                                smart_thread.st_state == ThreadState.Alive
+                                and true_state
+                                and not smart_thread.thread.is_alive()
+                            ):
+                                state_to_check = ThreadState.Stopped
+                            else:
+                                state_to_check = smart_thread.st_state
 
+                            if state_to_check in states:
+                                ret_names |= {name}
         return ret_names
 
     ####################################################################
