@@ -29332,7 +29332,10 @@ def scenario_driver(
     scenario_builder_args: dict[str, Any],
     caplog_to_use: pytest.LogCaptureFixture,
     commander_config: AppConfig = AppConfig.ScriptStyle,
-) -> None:
+    commander_name: str = "alpha",
+    group_name: str = "test1",
+    skip_join: bool = False,
+) -> ConfigVerifier:
     """Build and run a scenario.
 
     Args:
@@ -29340,6 +29343,8 @@ def scenario_driver(
         scenario_builder_args: the args to pass to the builder
         caplog_to_use: the capsys to capture log messages
         commander_config: specifies how the commander will run
+        group_name: group_name to use
+        skip_join: if True, do not do the join of the thread app
 
     """
 
@@ -29363,7 +29368,7 @@ def scenario_driver(
     ################################################################
     # Set up log verification and start tests
     ################################################################
-    commander_name = "alpha"
+    # commander_name = "alpha"
     log_ver = LogVer(log_name=__name__)
     log_ver.add_call_seq(name=commander_name, seq=get_formatted_call_sequence())
 
@@ -29371,7 +29376,7 @@ def scenario_driver(
     msgs = Msgs()
 
     config_ver = ConfigVerifier(
-        group_name="test1",
+        group_name=group_name,
         commander_name=commander_name,
         log_ver=log_ver,
         caplog_to_use=caplog_to_use,
@@ -29475,7 +29480,7 @@ def scenario_driver(
     config_ver.monitor_pause = True
     outer_thread_app: Union[OuterThreadApp, OuterSmartThreadApp, OuterSmartThreadApp2]
     if commander_config == AppConfig.ScriptStyle:
-        commander_thread = st.SmartThread(group_name="test1", name=commander_name)
+        commander_thread = st.SmartThread(group_name=group_name, name=commander_name)
 
         initialize_config_ver(
             cmd_thread=commander_thread,
@@ -29544,7 +29549,8 @@ def scenario_driver(
         pe[PE.request_msg][req_key_exit] += 1
 
         outer_thread_app.smart_thread.smart_start()
-        outer_thread_app.join()
+        if not skip_join:
+            outer_thread_app.join()
     elif commander_config == AppConfig.RemoteSmartThreadApp:
         outer_thread_app = OuterSmartThreadApp(
             config_ver=config_ver, name=commander_name, max_msgs=10
@@ -29634,6 +29640,53 @@ def scenario_driver(
             "scenario_driver does not recognize " f"{commander_config=}"
         )
 
+    # ################################################################
+    # # check that pending events are complete
+    # ################################################################
+    #
+    # if not config_ver.monitor_exit:
+    #     config_ver.log_test_msg("Monitor Checkpoint: check_pending_events 42")
+    #     config_ver.monitor_event.set()
+    #     config_ver.check_pending_events_complete_event.wait(timeout=30)
+    #
+    # config_ver.monitor_exit = True
+    # config_ver.monitor_event.set()
+    # config_ver.monitor_thread.join()
+    #
+    # ################################################################
+    # # check log results
+    # ################################################################
+    # match_results = config_ver.log_ver.get_match_results(caplog=caplog_to_use)
+    # config_ver.log_ver.print_match_results(match_results, print_matched=False)
+    # config_ver.log_ver.verify_log_results(match_results)
+    #
+    # log_len = len(caplog_to_use.record_tuples)
+    #
+    # logger.debug(f"mainline exiting {log_len=}")
+    #
+    # # print(f"scenario builder: {scenario_builder}")
+    # # print(f"scenario args: {scenario_builder_args}")
+
+    if not skip_join:
+        scenario_driver_part2(config_ver=config_ver, caplog_to_use=caplog_to_use)
+
+    return config_ver
+
+
+####################################################################
+# scenario_driver
+####################################################################
+def scenario_driver_part2(
+    config_ver: ConfigVerifier,
+    caplog_to_use: pytest.LogCaptureFixture,
+) -> None:
+    """Build and run a scenario.
+
+    Args:
+        config_ver: the ConfigVerifier
+        caplog_to_use: the capsys to capture log messages
+
+    """
     ################################################################
     # check that pending events are complete
     ################################################################
@@ -29650,16 +29703,16 @@ def scenario_driver(
     ################################################################
     # check log results
     ################################################################
-    match_results = log_ver.get_match_results(caplog=caplog_to_use)
-    log_ver.print_match_results(match_results, print_matched=False)
-    log_ver.verify_log_results(match_results)
+    match_results = config_ver.log_ver.get_match_results(caplog=caplog_to_use)
+    config_ver.log_ver.print_match_results(match_results, print_matched=False)
+    config_ver.log_ver.verify_log_results(match_results)
 
     log_len = len(caplog_to_use.record_tuples)
 
     logger.debug(f"mainline exiting {log_len=}")
 
-    print(f"scenario builder: {scenario_builder}")
-    print(f"scenario args: {scenario_builder_args}")
+    # print(f"scenario builder: {scenario_builder}")
+    # print(f"scenario args: {scenario_builder_args}")
 
 
 ########################################################################
@@ -32899,11 +32952,31 @@ class TestSmartThreadRtns:
             "num_stopped": num_stopped_0_arg,
         }
 
-        scenario_driver(
+        config_ver_1 = scenario_driver(
             scenario_builder=ConfigVerifier.build_get_smart_thread_names_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            commander_config=AppConfig.RemoteThreadApp,
+            commander_name="alpha",
+            group_name="test1",
+            skip_join=True,
         )
+
+        config_ver_2 = scenario_driver(
+            scenario_builder=ConfigVerifier.build_get_smart_thread_names_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=AppConfig.RemoteThreadApp,
+            commander_name="alpha",
+            group_name="test2",
+            skip_join=True,
+        )
+
+        # thread_app.join()
+        config_ver_1.all_threads["alpha"].thread.join()
+        config_ver_2.all_threads["alpha2"].thread.join()
+        scenario_driver_part2(config_ver=config_ver_1, caplog_to_use=caplog)
+        scenario_driver_part2(config_ver=config_ver_2, caplog_to_use=caplog)
 
     ####################################################################
     # test_get_current_smart_thread
