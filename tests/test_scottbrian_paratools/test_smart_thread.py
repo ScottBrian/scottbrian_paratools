@@ -3160,7 +3160,7 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
         super().__init__(
             search_str=(
                 f"{list_of_smart_requests} (entry|exit): "
-                r"requestor: [a-z0-9_]+ \([a-z0-9_]+\), "
+                rf"requestor: [a-z0-9_]+ \({config_ver.group_name}\), "
                 r"targets: \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
@@ -3231,8 +3231,8 @@ class SetupCompleteLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} "
-                "setup complete for targets: "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) "
+                f"{list_of_smart_requests} setup complete for targets: "
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3305,9 +3305,8 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                f"{list_of_smart_requests} {list_of_sub_processes} "
-                "(entry|exit): "
-                r"[a-z0-9_]+ \([a-z0-9_]+\)(, target: [a-z0-9_]+)*"
+                f"{list_of_smart_requests} {list_of_sub_processes} (entry|exit): "
+                rf"[a-z0-9_]+ \({config_ver.group_name}\)(, target: [a-z0-9_]+)*"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3380,9 +3379,9 @@ class SetStateLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) set state for thread "
-                "[a-z0-9_]+ from "
-                f"{list_of_thread_states} to {list_of_thread_states}"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) set state for "
+                f"thread [a-z0-9_]+ from {list_of_thread_states} to "
+                f"{list_of_thread_states}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3457,8 +3456,8 @@ class InitCompleteLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) completed initialization "
-                "of [a-z0-9_]+: "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) completed "
+                "initialization of [a-z0-9_]+: "
                 f"{list_of_thread_creates}, "
                 f"{list_of_thread_states}, "
                 f"{list_of_auto_start_texts}."
@@ -3587,6 +3586,7 @@ class F1AppExitLogSearchItem(LogSearchItem):
         target = split_msg[2]
 
         self.config_ver.expected_registered[target].is_alive = False
+        self.config_ver.log_test_msg(f"SBT1 set is_alive to False")
 
         self.config_ver.last_thread_stop_msg_idx[target] = self.found_log_idx
 
@@ -3612,8 +3612,8 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) determined that thread "
-                "[a-z0-9_]+ is already in state ThreadState.Unregistered"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) determined that "
+                "thread [a-z0-9_]+ is already in state ThreadState.Unregistered"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3678,8 +3678,8 @@ class AddRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) added [a-z0-9_]+ to "
-                f"SmartThread registry at UTC {time_match}"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) added [a-z0-9_]+ "
+                f"to SmartThread registry at UTC {time_match}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3733,7 +3733,7 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) added "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) added "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\) "
                 "to the pair_array"
             ),
@@ -3794,7 +3794,8 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) added status_blocks entry for "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) added "
+                "status_blocks entry for "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
                 "name = [a-z0-9_]+"
             ),
@@ -3858,8 +3859,10 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) updated _pair_array at "
-            f"UTC {time_match}",
+            search_str=(
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) updated "
+                f"_pair_array at UTC {time_match}"
+            ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -4018,8 +4021,8 @@ class RemRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removed [a-z0-9_]+ from "
-                f"registry for request: {list_of_smart_requests}"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) removed "
+                f"[a-z0-9_]+ from registry for request: {list_of_smart_requests}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4080,8 +4083,8 @@ class DidCleanRegLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) did cleanup of registry at "
-                rf"UTC {time_match}, deleted \[('[a-z0-9_]+'|, )+\]"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) did cleanup of "
+                rf"registry at UTC {time_match}, deleted \[('[a-z0-9_]+'|, )+\]"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4147,7 +4150,8 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removed status_blocks entry "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) removed "
+                "status_blocks entry "
                 r"for PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
                 f"name = [a-z0-9_]+{list_of_extras}"
             ),
@@ -4252,8 +4256,8 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removal deferred for "
-                r"status_blocks entry for PairKey\(name0='[a-z0-9_]+', "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) removal deferred "
+                r"for status_blocks entry for PairKey\(name0='[a-z0-9_]+', "
                 r"name1='[a-z0-9_]+'\), name = [a-z0-9_]+, reasons: "
             ),
             config_ver=config_ver,
@@ -4353,7 +4357,8 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removed _pair_array entry "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) removed "
+                "_pair_array entry "
                 r"for PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\)"
             ),
             config_ver=config_ver,
@@ -4424,8 +4429,8 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) did cleanup of _pair_array at "
-                f"UTC {time_match}"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) did cleanup of "
+                f"_pair_array at UTC {time_match}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4498,7 +4503,8 @@ class RequestAckLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_acks} [a-z0-9_]+"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) {list_of_acks} "
+                "[a-z0-9_]+"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4622,8 +4628,8 @@ class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} "
-                "detected remote [a-z0-9_]+ is stopped"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) "
+                f"{list_of_smart_requests} detected remote [a-z0-9_]+ is stopped"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4684,8 +4690,8 @@ class RequestRefreshLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} "
-                r"calling refresh, remaining remotes: \["
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) "
+                rf"{list_of_smart_requests} calling refresh, remaining remotes: \["
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4757,7 +4763,7 @@ class UnregJoinSuccessLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) did successful "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) did successful "
                 r"(smart_unreg|smart_join) of \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
@@ -4832,7 +4838,7 @@ class JoinWaitingLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) smart_join "
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) smart_join "
                 r"completed targets: \[('[a-z0-9_]+'|, )*\], "
                 r"pending targets: \[('[a-z0-9_]+'|, )*\]"
             ),
@@ -5095,9 +5101,9 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) raising {list_of_errors} "
-                f"while processing a {list_of_smart_requests} request with "
-                r"targets \[([a-z0-9_]*|,|'| )*\]"
+                rf"SmartThread [a-z0-9_]+ \({config_ver.group_name}\) raising "
+                f"{list_of_errors} while processing a {list_of_smart_requests} "
+                r"request with targets \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5163,7 +5169,7 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str="Monitor Checkpoint: [a-z_]+ [0-9]+",
+            search_str=f"Monitor Checkpoint: [a-z_]+ {config_ver.group_name} [0-9]+",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -5191,7 +5197,7 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         verify_name = split_msg[2]
-        verify_idx = split_msg[3]
+        verify_idx = split_msg[4]
 
         call_stm = f"self.config_ver.{verify_name}(verify_idx={verify_idx})"
 
@@ -5476,7 +5482,7 @@ class ConfigVerifier:
         self.completed_cmds: dict[str, list[int]] = defaultdict(list)
         self.f1_process_cmds: dict[str, bool] = {}
         self.thread_names: list[str] = [
-            "alpha",
+            commander_name,
             "beta",
             "charlie",
             "delta",
@@ -17002,11 +17008,13 @@ class ConfigVerifier:
     def build_simple_scenario(self) -> None:
         """Add config cmds to the scenario queue."""
         self.add_cmd(
-            VerifyConfig(cmd_runners="alpha", verify_type=VerifyType.VerifyStructures)
+            VerifyConfig(
+                cmd_runners=self.commander_name, verify_type=VerifyType.VerifyStructures
+            )
         )
         self.add_cmd(
             CreateF1AutoStart(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 f1_create_items=[
                     F1CreateItem(name="beta", auto_start=True, target_rtn=outer_f1),
                     F1CreateItem(
@@ -17018,10 +17026,10 @@ class ConfigVerifier:
                 ],
             )
         )
-        self.add_cmd(Pause(cmd_runners="alpha", pause_seconds=0.5))
+        self.add_cmd(Pause(cmd_runners=self.commander_name, pause_seconds=0.5))
         self.add_cmd(
             CreateF1NoStart(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 f1_create_items=[
                     F1CreateItem(
                         name="delta",
@@ -17052,10 +17060,10 @@ class ConfigVerifier:
         )
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyInRegistry,
                 names_to_check=[
-                    "alpha",
+                    self.commander_name,
                     "beta",
                     "charlie",
                     "delta",
@@ -17068,15 +17076,15 @@ class ConfigVerifier:
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyAlive,
-                names_to_check=["alpha", "beta", "charlie"],
+                names_to_check=[self.commander_name, "beta", "charlie"],
             )
         )
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyNotAlive,
                 names_to_check=["delta", "echo", "fox", "george"],
             )
@@ -17084,15 +17092,15 @@ class ConfigVerifier:
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyAliveState,
-                names_to_check=["alpha", "beta", "charlie"],
+                names_to_check=[self.commander_name, "beta", "charlie"],
             )
         )
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyRegisteredState,
                 names_to_check=["delta", "echo", "fox", "george"],
             )
@@ -17100,16 +17108,16 @@ class ConfigVerifier:
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyState,
-                names_to_check=["alpha", "beta", "charlie"],
+                names_to_check=[self.commander_name, "beta", "charlie"],
                 state_to_check=st.ThreadState.Alive,
             )
         )
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyState,
                 names_to_check=["delta", "echo", "fox", "george"],
                 state_to_check=st.ThreadState.Registered,
@@ -17118,10 +17126,10 @@ class ConfigVerifier:
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyPaired,
                 names_to_check=[
-                    "alpha",
+                    self.commander_name,
                     "beta",
                     "charlie",
                     "delta",
@@ -17131,42 +17139,64 @@ class ConfigVerifier:
                 ],
             )
         )
-        self.add_cmd(StartThread(cmd_runners="alpha", start_names=["delta", "echo"]))
+        self.add_cmd(
+            StartThread(cmd_runners=self.commander_name, start_names=["delta", "echo"])
+        )
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyAlive,
-                names_to_check=["alpha", "beta", "charlie", "delta", "echo"],
+                names_to_check=[
+                    self.commander_name,
+                    "beta",
+                    "charlie",
+                    "delta",
+                    "echo",
+                ],
             )
         )
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyAliveState,
-                names_to_check=["alpha", "beta", "charlie", "delta", "echo"],
+                names_to_check=[
+                    self.commander_name,
+                    "beta",
+                    "charlie",
+                    "delta",
+                    "echo",
+                ],
             )
         )
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyState,
-                names_to_check=["alpha", "beta", "charlie", "delta", "echo"],
+                names_to_check=[
+                    self.commander_name,
+                    "beta",
+                    "charlie",
+                    "delta",
+                    "echo",
+                ],
                 state_to_check=st.ThreadState.Alive,
             )
         )
 
         self.add_cmd(
-            VerifyConfig(cmd_runners="alpha", verify_type=VerifyType.VerifyStructures)
+            VerifyConfig(
+                cmd_runners=self.commander_name, verify_type=VerifyType.VerifyStructures
+            )
         )
         ################################################################
         # smart_send
         ################################################################
         msgs_to_send = SendRecvMsgs(
             sender_names=["delta", "echo"],
-            receiver_names=["alpha", "beta", "charlie"],
+            receiver_names=[self.commander_name, "beta", "charlie"],
             num_msgs=1,
             text="build_simple_scenario",
         )
@@ -17174,8 +17204,8 @@ class ConfigVerifier:
         send_msg_serial_num = self.add_cmd(
             SendMsg(
                 cmd_runners=["delta", "echo"],
-                receivers=["alpha", "beta", "charlie"],
-                exp_receivers=["alpha", "beta", "charlie"],
+                receivers=[self.commander_name, "beta", "charlie"],
+                exp_receivers=[self.commander_name, "beta", "charlie"],
                 msgs_to_send=msgs_to_send,
                 msg_idx=0,
                 log_msg="SendCmd test log message 1",
@@ -17187,7 +17217,7 @@ class ConfigVerifier:
         ################################################################
         self.add_cmd(
             ConfirmResponse(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 confirm_cmd="SendMsg",
                 confirm_serial_num=send_msg_serial_num,
                 confirmers=["delta", "echo"],
@@ -17198,7 +17228,7 @@ class ConfigVerifier:
         ################################################################
         recv_msg_serial_num = self.add_cmd(
             RecvMsg(
-                cmd_runners=["alpha", "beta", "charlie"],
+                cmd_runners=[self.commander_name, "beta", "charlie"],
                 senders=["delta", "echo"],
                 exp_senders=["delta", "echo"],
                 exp_msgs=msgs_to_send,
@@ -17211,10 +17241,10 @@ class ConfigVerifier:
         ################################################################
         self.add_cmd(
             ConfirmResponse(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 confirm_cmd="RecvMsg",
                 confirm_serial_num=recv_msg_serial_num,
-                confirmers=["alpha", "beta", "charlie"],
+                confirmers=[self.commander_name, "beta", "charlie"],
             )
         )
 
@@ -17269,35 +17299,40 @@ class ConfigVerifier:
 
         self.add_cmd(
             StopThread(
-                cmd_runners="alpha", stop_names=["beta", "charlie", "delta", "echo"]
+                cmd_runners=self.commander_name,
+                stop_names=["beta", "charlie", "delta", "echo"],
             )
         )
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyNotAlive,
                 names_to_check=["beta", "charlie", "delta", "echo", "fox", "george"],
             )
         )
 
         self.add_cmd(
-            VerifyConfig(cmd_runners="alpha", verify_type=VerifyType.VerifyStructures)
+            VerifyConfig(
+                cmd_runners=self.commander_name, verify_type=VerifyType.VerifyStructures
+            )
         )
         self.add_cmd(
             Join(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 join_names=["beta", "charlie", "delta", "echo"],
                 log_msg="Join test log message 7",
             )
         )
 
         self.add_cmd(
-            VerifyConfig(cmd_runners="alpha", verify_type=VerifyType.VerifyStructures)
+            VerifyConfig(
+                cmd_runners=self.commander_name, verify_type=VerifyType.VerifyStructures
+            )
         )
         self.add_cmd(
             Unregister(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 unregister_targets=["fox", "george"],
                 log_msg="Unregister test log message 8",
             )
@@ -17305,14 +17340,16 @@ class ConfigVerifier:
 
         self.add_cmd(
             VerifyConfig(
-                cmd_runners="alpha",
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyNotInRegistry,
                 names_to_check=["fox", "george"],
             )
         )
 
         self.add_cmd(
-            VerifyConfig(cmd_runners="alpha", verify_type=VerifyType.VerifyStructures)
+            VerifyConfig(
+                cmd_runners=self.commander_name, verify_type=VerifyType.VerifyStructures
+            )
         )
 
     ####################################################################
@@ -17359,7 +17396,7 @@ class ConfigVerifier:
             if name in auto_start_names:
                 self.add_cmd(
                     CreateF1AutoStart(
-                        cmd_runners="alpha",
+                        cmd_runners=self.commander_name,
                         f1_create_items=[
                             F1CreateItem(
                                 name=name, auto_start=True, target_rtn=outer_f1
@@ -17935,7 +17972,9 @@ class ConfigVerifier:
             verify_data=verify_data,
         )
 
-        self.log_test_msg(f"Monitor Checkpoint: {verify_name} {verify_idx}")
+        self.log_test_msg(
+            f"Monitor Checkpoint: {verify_name} {self.group_name} " f"{verify_idx}"
+        )
 
     ####################################################################
     # dec_recv_timeout
@@ -18225,10 +18264,10 @@ class ConfigVerifier:
                 == exp_names_not_true_state
             )
 
-            self.log_test_msg(
-                f"handle_get_smart_thread_names exit: {cmd_runner=}, {registered_names=}, "
-                f"{alive_names=}, {stopped_names=}"
-            )
+        self.log_test_msg(
+            f"handle_get_smart_thread_names exit: {cmd_runner=}, {registered_names=}, "
+            f"{alive_names=}, {stopped_names=}"
+        )
 
     ####################################################################
     # handle_join
@@ -19785,6 +19824,7 @@ class ConfigVerifier:
 
         """
         self.expected_registered[target].is_alive = True
+        self.log_test_msg(f"SBT2 set is_alive to True")
 
         ################################################################
         # next step is to add entry to pair array
@@ -19796,21 +19836,22 @@ class ConfigVerifier:
     ####################################################################
     # handle_set_state_start_to_alive
     ####################################################################
-    def handle_set_state_start_to_alive(self, cmd_runner: str, target: str) -> None:
-        """Determine next step for set state.
-
-        Args:
-            cmd_runner: thread name doing the state change
-            target: thread name getting its state changed
-
-        """
-        self.expected_registered[target].is_alive = True
-
-        ################################################################
-        # determine next step
-        ################################################################
-        pe = self.pending_events[cmd_runner]
-        pe[PE.num_targets_remaining] -= 1
+    # def handle_set_state_start_to_alive(self, cmd_runner: str, target: str) -> None:
+    #     """Determine next step for set state.
+    #
+    #     Args:
+    #         cmd_runner: thread name doing the state change
+    #         target: thread name getting its state changed
+    #
+    #     """
+    #     self.expected_registered[target].is_alive = True
+    #     self.config_ver.log_test_msg(f"SBT3 set is_alive to True")
+    #
+    #     ################################################################
+    #     # determine next step
+    #     ################################################################
+    #     pe = self.pending_events[cmd_runner]
+    #     pe[PE.num_targets_remaining] -= 1
 
     ####################################################################
     # handle_set_state_reg_to_unregistering
@@ -19852,6 +19893,7 @@ class ConfigVerifier:
 
         """
         self.expected_registered[target].is_alive = False
+        self.log_test_msg(f"SBT4 set is_alive to False")
 
     ####################################################################
     # handle_set_state_alive_to_stop
@@ -20323,6 +20365,7 @@ class ConfigVerifier:
             self.recently_stopped[stopped_name] = log_idx
             if stopped_name in self.expected_registered:
                 self.expected_registered[stopped_name].is_alive = False
+                self.log_test_msg(f"SBT5 set is_alive to False")
             self.stopped_event_items[cmd_runner].targets.remove(stopped_name)
             if not self.stopped_event_items[cmd_runner].targets:
                 self.stopped_event_items[cmd_runner].client_event.set()
@@ -21042,14 +21085,14 @@ class ConfigVerifier:
     # main_driver
     ####################################################################
     def main_driver(self) -> None:
-        """Delete the thread from the ConfigVerifier."""
+        """Drive the config commands for the test scenario."""
         self.log_ver.add_call_seq(
             name="main_driver", seq="test_smart_thread.py::ConfigVerifier.main_driver"
         )
-
+        self.log_test_msg(f"main_driver entry: {self.group_name=}")
         while self.cmd_suite and not self.monitor_bail:
             cmd: ConfigCmd = self.cmd_suite.popleft()
-            self.log_test_msg(f"config_cmd: {cmd}")
+            self.log_test_msg(f"config_cmd: {self.group_name} {cmd}")
 
             if not cmd.cmd_runners:
                 raise InvalidInputDetected(
@@ -21063,6 +21106,7 @@ class ConfigVerifier:
             if self.commander_name in cmd.cmd_runners:
                 cmd.run_process(cmd_runner=self.commander_name)
                 self.completed_cmds[self.commander_name].append(cmd.serial_num)
+        self.log_test_msg(f"main_driver exit: {self.group_name=}")
 
     ####################################################################
     # set_recv_timeout
@@ -21585,7 +21629,7 @@ class ConfigVerifier:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found SmartThread real registry has "
-                    f"entry for {name=} that has is_alive of "
+                    f"entry for {name=} {self.group_name} that has is_alive of "
                     f"{real_reg_item.is_alive} which does not match the "
                     f"expected_registered is_alive of "
                     f"{self.expected_registered[name].is_alive}"
@@ -22492,7 +22536,7 @@ class ConfigVerifier:
         ################################################################
         group_name = "test1"
         search_msg = (
-            r"config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
+            rf"config_cmd: {self.group_name} RecvMsg\(serial=[0-9]+, line=[0-9]+, "
             f"cmd_runners='{receiver_names[0]}', "
             f"senders='{sender_names[0]}'"
         )
@@ -22509,7 +22553,7 @@ class ConfigVerifier:
         # get first wait config_cmd log msg
         ################################################################
         search_msg = (
-            r"config_cmd: Wait\(serial=[0-9]+, line=[0-9]+, "
+            rf"config_cmd: {self.group_name} Wait\(serial=[0-9]+, line=[0-9]+, "
             f"cmd_runners='{waiter_names[0]}', "
             f"resumers="
         )
@@ -22538,7 +22582,7 @@ class ConfigVerifier:
         # get config_cmd log msg for VerifyDefDel
         ################################################################
         search_msg = (
-            r"config_cmd: VerifyDefDel\(serial=[0-9]+, line=[0-9]+, "
+            rf"config_cmd: {self.group_name} VerifyDefDel\(serial=[0-9]+, line=[0-9]+, "
             f"cmd_runners='{self.commander_name}', "
             f"def_del_scenario="
         )
@@ -24306,7 +24350,7 @@ class OuterThreadApp(threading.Thread):
 
         """
         super().__init__()
-        threading.current_thread().name = name
+        # threading.current_thread().name = name
         self.config_ver = config_ver
         self.smart_thread = st.SmartThread(
             group_name=config_ver.group_name,
@@ -29331,6 +29375,7 @@ def scenario_driver(
     scenario_builder: Callable[..., None],
     scenario_builder_args: dict[str, Any],
     caplog_to_use: pytest.LogCaptureFixture,
+    log_ver: LogVer,
     commander_config: AppConfig = AppConfig.ScriptStyle,
     commander_name: str = "alpha",
     group_name: str = "test1",
@@ -29351,25 +29396,24 @@ def scenario_driver(
     ################################################################
     # f1
     ################################################################
-    def f1(f1_name: str, f1_config_ver: ConfigVerifier) -> None:
-        log_msg_f1 = f"f1 entered for {f1_name}"
-        log_ver.add_msg(log_level=logging.DEBUG, log_msg=log_msg_f1)
-        logger.debug(log_msg_f1)
-
-        f1_config_ver.f1_driver(f1_name=f1_name)
-
-        ############################################################
-        # exit
-        ############################################################
-        log_msg_f1 = f"f1 exiting for {f1_name}"
-        log_ver.add_msg(log_level=logging.DEBUG, log_msg=log_msg_f1)
-        logger.debug(log_msg_f1)
+    # def f1(f1_name: str, f1_config_ver: ConfigVerifier) -> None:
+    #     log_msg_f1 = f"f1 entered for {f1_name}"
+    #     log_ver.add_msg(log_level=logging.DEBUG, log_msg=log_msg_f1)
+    #     logger.debug(log_msg_f1)
+    #
+    #     f1_config_ver.f1_driver(f1_name=f1_name)
+    #
+    #     ############################################################
+    #     # exit
+    #     ############################################################
+    #     log_msg_f1 = f"f1 exiting for {f1_name}"
+    #     log_ver.add_msg(log_level=logging.DEBUG, log_msg=log_msg_f1)
+    #     logger.debug(log_msg_f1)
 
     ################################################################
     # Set up log verification and start tests
     ################################################################
-    # commander_name = "alpha"
-    log_ver = LogVer(log_name=__name__)
+    # log_ver = LogVer(log_name=__name__)
     log_ver.add_call_seq(name=commander_name, seq=get_formatted_call_sequence())
 
     random.seed(42)
@@ -29384,9 +29428,9 @@ def scenario_driver(
         max_msgs=10,
     )
 
-    config_ver.log_test_msg("mainline entered")
-    config_ver.log_test_msg(f"scenario builder: {scenario_builder}")
-    config_ver.log_test_msg(f"scenario args: {scenario_builder_args}")
+    config_ver.log_test_msg(f"mainline entered for {group_name=}")
+    config_ver.log_test_msg(f"scenario builder {group_name=}: {scenario_builder}")
+    config_ver.log_test_msg(f"scenario args {group_name=}: {scenario_builder_args}")
     config_ver.log_test_msg(f"{commander_config=}")
 
     config_ver.unregistered_names -= {commander_name}
@@ -29640,33 +29684,6 @@ def scenario_driver(
             "scenario_driver does not recognize " f"{commander_config=}"
         )
 
-    # ################################################################
-    # # check that pending events are complete
-    # ################################################################
-    #
-    # if not config_ver.monitor_exit:
-    #     config_ver.log_test_msg("Monitor Checkpoint: check_pending_events 42")
-    #     config_ver.monitor_event.set()
-    #     config_ver.check_pending_events_complete_event.wait(timeout=30)
-    #
-    # config_ver.monitor_exit = True
-    # config_ver.monitor_event.set()
-    # config_ver.monitor_thread.join()
-    #
-    # ################################################################
-    # # check log results
-    # ################################################################
-    # match_results = config_ver.log_ver.get_match_results(caplog=caplog_to_use)
-    # config_ver.log_ver.print_match_results(match_results, print_matched=False)
-    # config_ver.log_ver.verify_log_results(match_results)
-    #
-    # log_len = len(caplog_to_use.record_tuples)
-    #
-    # logger.debug(f"mainline exiting {log_len=}")
-    #
-    # # print(f"scenario builder: {scenario_builder}")
-    # # print(f"scenario args: {scenario_builder_args}")
-
     if not skip_join:
         scenario_driver_part2(config_ver=config_ver, caplog_to_use=caplog_to_use)
 
@@ -29692,7 +29709,9 @@ def scenario_driver_part2(
     ################################################################
 
     if not config_ver.monitor_exit:
-        config_ver.log_test_msg("Monitor Checkpoint: check_pending_events 42")
+        config_ver.log_test_msg(
+            f"Monitor Checkpoint: check_pending_events {config_ver.group_name} 42"
+        )
         config_ver.monitor_event.set()
         config_ver.check_pending_events_complete_event.wait(timeout=30)
 
@@ -29707,9 +29726,9 @@ def scenario_driver_part2(
     config_ver.log_ver.print_match_results(match_results, print_matched=False)
     config_ver.log_ver.verify_log_results(match_results)
 
-    log_len = len(caplog_to_use.record_tuples)
-
-    logger.debug(f"mainline exiting {log_len=}")
+    # log_len = len(caplog_to_use.record_tuples)
+    #
+    # logger.debug(f"mainline exiting {log_len=}")
 
     # print(f"scenario builder: {scenario_builder}")
     # print(f"scenario args: {scenario_builder_args}")
@@ -32952,6 +32971,7 @@ class TestSmartThreadRtns:
             "num_stopped": num_stopped_0_arg,
         }
 
+        log_ver = LogVer(log_name=__name__)
         config_ver_1 = scenario_driver(
             scenario_builder=ConfigVerifier.build_get_smart_thread_names_scenario,
             scenario_builder_args=args_for_scenario_builder,
@@ -32960,6 +32980,7 @@ class TestSmartThreadRtns:
             commander_name="alpha",
             group_name="test1",
             skip_join=True,
+            log_ver=log_ver,
         )
 
         config_ver_2 = scenario_driver(
@@ -32970,11 +32991,12 @@ class TestSmartThreadRtns:
             commander_name="alpha",
             group_name="test2",
             skip_join=True,
+            log_ver=log_ver,
         )
 
         # thread_app.join()
         config_ver_1.all_threads["alpha"].thread.join()
-        config_ver_2.all_threads["alpha2"].thread.join()
+        config_ver_2.all_threads["alpha"].thread.join()
         scenario_driver_part2(config_ver=config_ver_1, caplog_to_use=caplog)
         scenario_driver_part2(config_ver=config_ver_2, caplog_to_use=caplog)
 
