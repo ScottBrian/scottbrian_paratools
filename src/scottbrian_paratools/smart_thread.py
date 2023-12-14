@@ -1467,18 +1467,8 @@ class SmartThread:
         # for group_name, inner_reg in self.registry.items():
         keys_to_del = []
         for key, item in self.registry.items():
-            # Note that for display purposes _get_state will return
-            # stopped instead of alive when the thread is not alive
-            # and state is alive. The decision to delete this item,
-            # however, is done only when the st_state is stopped as
-            # that indicates that a smart_unreg or smart_join has
-            # been requested. We could have designed _clean_registry
-            # to go ahead and delete entries when they are not alive
-            # with ThreadState.Alive, meaning that any request other
-            # than smart_unreg or smart_join could cause the
-            # "stopped" entries to be deleted, but this would have
-            # led to unpredictable and inconsistent behavior
-            # depending on the mix of requests.
+            # Note that we will change state Alive to Stopped if
+            # the threading is_alive() method returns False.
             is_alive = item.thread.is_alive()
             state = self._get_state(name=key)
             if state == ThreadState.Alive and not is_alive:
@@ -1488,7 +1478,8 @@ class SmartThread:
                 )
                 state = ThreadState.Stopped
             logger.debug(
-                f"name={key}, {is_alive=}, state={state}, " f"smart_thread={item}"
+                f"name={key}, ({self.group_name}) {is_alive=}, state={state}, "
+                f"smart_thread={item}"
             )
 
             if item.unregister:

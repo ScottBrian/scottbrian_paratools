@@ -3928,7 +3928,7 @@ class RegistryStatusLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "name=[a-z0-9_]+, is_alive=(True|False), "
+                rf"name=[a-z0-9_]+, \({config_ver.group_name}\) is_alive=(True|False), "
                 f"state={list_of_thread_states}, smart_thread="
             ),
             config_ver=config_ver,
@@ -3959,8 +3959,8 @@ class RegistryStatusLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         target = split_msg[0][5:-1]
-        is_alive = eval(split_msg[1][9:-1])
-        state = eval("st." + split_msg[2][6:-1])
+        is_alive = eval(split_msg[2][9:-1])
+        state = eval("st." + split_msg[3][6:-1])
 
         if (
             self.config_ver.pending_events[target][PE.status_msg][(is_alive, state)]
@@ -4988,8 +4988,8 @@ class CmdWaitingLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                f"cmd_runner='[a-z0-9_]+' {list_of_waiting_methods} "
-                "waiting for monitor"
+                rf"cmd_runner='[a-z0-9_]+' \({config_ver.group_name}\) "
+                f"{list_of_waiting_methods} waiting for monitor"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5703,8 +5703,11 @@ class ConfigVerifier:
             if self.monitor_bail:
                 break
 
+            # self.log_test_msg(f"monitor ({self.group_name}) about to look for messages")
             while self.get_log_msgs():
+                # self.log_test_msg(f"monitor ({self.group_name}) in first while")
                 while self.log_found_items:
+                    # self.log_test_msg(f"monitor ({self.group_name}) in second while")
                     found_log_item = self.log_found_items.popleft()
 
                     # log the log msg being processed but mangle it a
@@ -5716,7 +5719,7 @@ class ConfigVerifier:
                         self.log_test_msg(f"monitor processing msg: {semi_msg}")
 
                     found_log_item.run_process()
-
+            # self.log_test_msg(f"monitor ({self.group_name}) completed message loop")
         self.log_test_msg(
             f"monitor exiting: {self.monitor_bail=}," f"{self.monitor_exit=}"
         )
@@ -17919,7 +17922,10 @@ class ConfigVerifier:
 
         self.monitor_event.set()
 
-        self.log_test_msg(f"{cmd_runner=} create_f1_thread waiting " f"for monitor")
+        self.log_test_msg(
+            f"{cmd_runner=} ({self.group_name}) create_f1_thread waiting "
+            f"for monitor"
+        )
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
             del self.cmd_waiting_event_items[cmd_runner]
@@ -18595,7 +18601,7 @@ class ConfigVerifier:
         """
         self.log_test_msg(
             "handle_request_entry_exit_log_msg entry: "
-            f"{cmd_runner=}, {request_name=}, {entry_exit=}, "
+            f"{cmd_runner=}, ({self.group_name}) {request_name=}, {entry_exit=}, "
             f"{targets=}"
         )
         pe = self.pending_events[cmd_runner]
@@ -18693,6 +18699,12 @@ class ConfigVerifier:
                 pe[PE.save_current_request] = StartRequest(req_type=st.ReqType.NoReq)
             else:
                 pe[PE.current_request] = StartRequest(req_type=st.ReqType.NoReq)
+
+        self.log_test_msg(
+            "handle_request_entry_exit_log_msg exit: "
+            f"{cmd_runner=}, ({self.group_name}) {request_name=}, {entry_exit=}, "
+            f"{targets=}"
+        )
 
     ####################################################################
     # handle_request_smart_init_entry
@@ -20336,7 +20348,9 @@ class ConfigVerifier:
         """
         with self.ops_lock:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-        self.log_test_msg(f"{cmd_runner=} {rtn_name} waiting for monitor")
+        self.log_test_msg(
+            f"{cmd_runner=} ({self.group_name}) {rtn_name} waiting for " f"monitor"
+        )
         self.monitor_event.set()
         if self.cmd_waiting_event_items[cmd_runner].wait(timeout=60):
             with self.ops_lock:
@@ -20344,7 +20358,8 @@ class ConfigVerifier:
         else:
             self.abort_all_f1_threads()
             raise CmdTimedOut(
-                f"wait_for_monitor timed out for {cmd_runner=} " f"and {rtn_name=}"
+                f"wait_for_monitor timed out for {cmd_runner=} ({self.group_name}) "
+                f"and {rtn_name=}"
             )
 
     ####################################################################
@@ -20691,7 +20706,10 @@ class ConfigVerifier:
         with self.ops_lock:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
-        self.log_test_msg(f"{cmd_runner=} handle_unregister waiting for " f"monitor")
+        self.log_test_msg(
+            f"{cmd_runner=} ({self.group_name}) handle_unregister "
+            f"waiting for monitor"
+        )
 
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
@@ -21185,7 +21203,9 @@ class ConfigVerifier:
                     break
                 time.sleep(0.05)
 
-        self.log_test_msg(f"{cmd_runner=} stop_thread waiting for monitor")
+        self.log_test_msg(
+            f"{cmd_runner=} ({self.group_name}) stop_thread waiting for monitor"
+        )
         self.monitor_event.set()
         if not self.stopped_event_items[cmd_runner].client_event.wait(timeout=60):
             self.abort_all_f1_threads()
