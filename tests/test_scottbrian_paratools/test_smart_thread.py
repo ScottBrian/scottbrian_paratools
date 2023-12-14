@@ -3556,7 +3556,10 @@ class F1AppExitLogSearchItem(LogSearchItem):
         list_of_thread_apps = r"(OuterF1ThreadApp.run\(\)" "|outer_f1)"
         super().__init__(
             # search_str=r'OuterF1ThreadApp.run\(\) exit: [a-z0-9_]+',
-            search_str=f"{list_of_thread_apps} exit: [a-z0-9_]+",
+            search_str=(
+                f"{list_of_thread_apps} exit: [a-z0-9_]+ "
+                rf"\({config_ver.group_name}\)"
+            ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -4919,7 +4922,10 @@ class StoppedLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str="[a-z0-9_]+ has been stopped by [a-z0-9_]+",
+            search_str=(
+                rf"[a-z0-9_]+ \({config_ver.group_name}\) has been stopped by "
+                "[a-z0-9_]+"
+            ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -4948,7 +4954,7 @@ class StoppedLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
 
         self.config_ver.handle_stopped_log_msg(
-            cmd_runner=split_msg[5],
+            cmd_runner=split_msg[6],
             stopped_name=split_msg[0],
             log_idx=self.found_log_idx,
         )
@@ -5043,7 +5049,7 @@ class DebugLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str="TestDebug [a-z0-9_]+ ",
+            search_str=rf"TestDebug [a-z0-9_]+ \({config_ver.group_name}\)",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -17920,15 +17926,17 @@ class ConfigVerifier:
 
         self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
-        self.monitor_event.set()
+        self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="create_f1_thread")
 
-        self.log_test_msg(
-            f"{cmd_runner=} ({self.group_name}) create_f1_thread waiting "
-            f"for monitor"
-        )
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            del self.cmd_waiting_event_items[cmd_runner]
+        # self.monitor_event.set()
+        #
+        # self.log_test_msg(
+        #     f"{cmd_runner=} ({self.group_name}) create_f1_thread waiting "
+        #     f"for monitor"
+        # )
+        # self.cmd_waiting_event_items[cmd_runner].wait()
+        # with self.ops_lock:
+        #     del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f"create_f1_thread exiting: {cmd_runner=}, " f"{name=}")
 
@@ -18374,7 +18382,7 @@ class ConfigVerifier:
         elapsed_time: float = time.time() - start_time
         time_per_target: float = elapsed_time / len(join_names)
 
-        self.monitor_event.set()
+        # self.monitor_event.set()
 
         self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="handle_join")
 
@@ -20346,6 +20354,7 @@ class ConfigVerifier:
             rtn_name: name of rtn that will wait
 
         """
+        self.log_test_msg(f"wait_for_monitor {cmd_runner=} {rtn_name=}")
         with self.ops_lock:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
         self.log_test_msg(
@@ -20701,19 +20710,20 @@ class ConfigVerifier:
                 targets=unregister_targets, log_msg=log_msg
             )
 
-        self.monitor_event.set()
+        self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="handle_unregister")
+        # self.monitor_event.set()
 
-        with self.ops_lock:
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-
-        self.log_test_msg(
-            f"{cmd_runner=} ({self.group_name}) handle_unregister "
-            f"waiting for monitor"
-        )
-
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            del self.cmd_waiting_event_items[cmd_runner]
+        # with self.ops_lock:
+        #     self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+        #
+        # self.log_test_msg(
+        #     f"{cmd_runner=} ({self.group_name}) handle_unregister "
+        #     f"waiting for monitor"
+        # )
+        #
+        # self.cmd_waiting_event_items[cmd_runner].wait()
+        # with self.ops_lock:
+        #     del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f"handle_unregister exiting: {cmd_runner=}")
 
@@ -21187,7 +21197,8 @@ class ConfigVerifier:
             for stop_name in work_names:
                 if not self.all_threads[stop_name].thread.is_alive():
                     self.log_test_msg(
-                        f"{stop_name} has been stopped by " f"{cmd_runner}"
+                        f"{stop_name} ({self.group_name}) has been stopped by "
+                        f"{cmd_runner}"
                     )
                     self.monitor_event.set()
                     if send_recv_msgs:
@@ -21202,6 +21213,10 @@ class ConfigVerifier:
                     work_names -= {stop_name}
                     break
                 time.sleep(0.05)
+
+        self.monitor_event.set()
+        # we can not use wait_for_monitor because stop uses stopped_event_items
+        # self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="stop_thread")
 
         self.log_test_msg(
             f"{cmd_runner=} ({self.group_name}) stop_thread waiting for monitor"
@@ -24501,7 +24516,10 @@ class OuterF1ThreadApp(threading.Thread):
         ################################################################
         # exit
         ################################################################
-        self.config_ver.log_test_msg(f"OuterF1ThreadApp.run() exit: {self.name}")
+        self.config_ver.log_test_msg(
+            f"OuterF1ThreadApp.run() exit: {self.name} "
+            f"({self.config_ver.group_name})"
+        )
 
 
 ########################################################################
@@ -24522,7 +24540,9 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier) -> None:
     ####################################################################
     # exit
     ####################################################################
-    f1_config_ver.log_test_msg(f"outer_f1 exit: {f1_name}")
+    f1_config_ver.log_test_msg(
+        f"outer_f1 exit: {f1_name} " f"({f1_config_ver.group_name})"
+    )
 
 
 ########################################################################
@@ -29388,9 +29408,21 @@ class TestSmartThreadExamples:
         logger.debug("mainline exiting")
 
 
-####################################################################
+########################################################################
 # scenario_driver
-####################################################################
+########################################################################
+@dataclass
+class ScenarioDriverParms:
+    scenario_builder: Callable[..., None]
+    scenario_builder_args: dict[str, Any]
+    caplog_to_use: pytest.LogCaptureFixture
+    log_ver: LogVer
+    commander_config: AppConfig = AppConfig.ScriptStyle
+    commander_name: str = "alpha"
+    group_name: str = "test1"
+    skip_join: bool = False
+
+
 def scenario_driver(
     scenario_builder: Callable[..., None],
     scenario_builder_args: dict[str, Any],
@@ -29412,51 +29444,67 @@ def scenario_driver(
         skip_join: if True, do not do the join of the thread app
 
     """
+    scenarios_driver_parms = ScenarioDriverParms(
+        scenario_builder=scenario_builder,
+        scenario_builder_args=scenario_builder_args,
+        caplog_to_use=caplog_to_use,
+        log_ver=log_ver,
+        commander_config=commander_config,
+        commander_name=commander_name,
+        group_name=group_name,
+        skip_join=skip_join,
+    )
 
-    ################################################################
-    # f1
-    ################################################################
-    # def f1(f1_name: str, f1_config_ver: ConfigVerifier) -> None:
-    #     log_msg_f1 = f"f1 entered for {f1_name}"
-    #     log_ver.add_msg(log_level=logging.DEBUG, log_msg=log_msg_f1)
-    #     logger.debug(log_msg_f1)
-    #
-    #     f1_config_ver.f1_driver(f1_name=f1_name)
-    #
-    #     ############################################################
-    #     # exit
-    #     ############################################################
-    #     log_msg_f1 = f"f1 exiting for {f1_name}"
-    #     log_ver.add_msg(log_level=logging.DEBUG, log_msg=log_msg_f1)
-    #     logger.debug(log_msg_f1)
+    return scenario_driver_part1(
+        scenario_builder=scenario_builder,
+        scenario_builder_args=scenario_builder_args,
+        caplog_to_use=caplog_to_use,
+        log_ver=log_ver,
+        commander_config=commander_config,
+        commander_name=commander_name,
+        group_name=group_name,
+        skip_join=skip_join,
+    )
 
+
+####################################################################
+# scenario_driver
+####################################################################
+def scenario_driver_part1(sdp: ScenarioDriverParms) -> ConfigVerifier:
+    """Build and run a scenario.
+
+    Args:
+        config_ver: the ConfigVerifier
+        caplog_to_use: the capsys to capture log messages
+
+    """
     ################################################################
     # Set up log verification and start tests
     ################################################################
     # log_ver = LogVer(log_name=__name__)
-    log_ver.add_call_seq(name=commander_name, seq=get_formatted_call_sequence())
+    sdp.log_ver.add_call_seq(name=sdp.commander_name, seq=get_formatted_call_sequence())
 
     random.seed(42)
     msgs = Msgs()
 
     config_ver = ConfigVerifier(
-        group_name=group_name,
-        commander_name=commander_name,
-        log_ver=log_ver,
-        caplog_to_use=caplog_to_use,
+        group_name=sdp.group_name,
+        commander_name=sdp.commander_name,
+        log_ver=sdp.log_ver,
+        caplog_to_use=sdp.caplog_to_use,
         msgs=msgs,
         max_msgs=10,
     )
 
-    config_ver.log_test_msg(f"mainline entered for {group_name=}")
-    config_ver.log_test_msg(f"scenario builder {group_name=}: {scenario_builder}")
-    config_ver.log_test_msg(f"scenario args {group_name=}: {scenario_builder_args}")
-    config_ver.log_test_msg(f"{commander_config=}")
+    config_ver.log_test_msg(f"mainline entered for {sdp.group_name=}")
+    config_ver.log_test_msg(f"scenario builder {sdp.group_name=}: {sdp.scenario_builder}")
+    config_ver.log_test_msg(f"scenario args {sdp.group_name=}: {sdp.scenario_builder_args}")
+    config_ver.log_test_msg(f"{sdp.commander_config=}")
 
-    config_ver.unregistered_names -= {commander_name}
-    config_ver.active_names |= {commander_name}
+    config_ver.unregistered_names -= {sdp.commander_name}
+    config_ver.active_names |= {sdp.commander_name}
 
-    scenario_builder(config_ver, **scenario_builder_args)
+    sdp.scenario_builder(config_ver, **sdp.scenario_builder_args)
 
     # config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
     config_ver.add_cmd(
@@ -33008,7 +33056,7 @@ class TestSmartThreadRtns:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=AppConfig.RemoteThreadApp,
-            commander_name="alpha",
+            commander_name="alpha2",
             group_name="test2",
             skip_join=True,
             log_ver=log_ver,
@@ -33016,7 +33064,7 @@ class TestSmartThreadRtns:
 
         # thread_app.join()
         config_ver_1.all_threads["alpha"].thread.join()
-        config_ver_2.all_threads["alpha"].thread.join()
+        config_ver_2.all_threads["alpha2"].thread.join()
         scenario_driver_part2(config_ver=config_ver_1, caplog_to_use=caplog)
         scenario_driver_part2(config_ver=config_ver_2, caplog_to_use=caplog)
 
