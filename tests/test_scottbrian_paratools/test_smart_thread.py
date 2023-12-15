@@ -56,6 +56,8 @@ import scottbrian_paratools.smart_thread as st
 
 logger = logging.getLogger(__name__)
 
+log_lock: threading.Lock = threading.Lock()
+
 
 ########################################################################
 # Type alias
@@ -18118,7 +18120,8 @@ class ConfigVerifier:
         # we should never call with a non-empty deque
         assert not self.log_found_items
 
-        work_log = self.caplog_to_use.record_tuples.copy()
+        with log_lock:
+            work_log = self.caplog_to_use.record_tuples.copy()
 
         end_idx = len(work_log)
 
@@ -29415,24 +29418,20 @@ class TestSmartThreadExamples:
 class ScenarioDriverParms:
     scenario_builder: Callable[..., None]
     scenario_builder_args: dict[str, Any]
-    caplog_to_use: pytest.LogCaptureFixture
-    log_ver: LogVer
     commander_config: AppConfig = AppConfig.ScriptStyle
     commander_name: str = "alpha"
     group_name: str = "test1"
-    skip_join: bool = False
 
 
 def scenario_driver(
-    scenario_builder: Callable[..., None],
-    scenario_builder_args: dict[str, Any],
     caplog_to_use: pytest.LogCaptureFixture,
-    log_ver: LogVer,
+    scenario_builder: Callable[..., None] = ConfigVerifier.build_simple_scenario,
+    scenario_builder_args: dict[str, Any] = {},
     commander_config: AppConfig = AppConfig.ScriptStyle,
     commander_name: str = "alpha",
     group_name: str = "test1",
-    skip_join: bool = False,
-) -> ConfigVerifier:
+    scenario_driver_parms: Optional[list[ScenarioDriverParms]] = None,
+) -> None:
     """Build and run a scenario.
 
     Args:
@@ -29440,37 +29439,66 @@ def scenario_driver(
         scenario_builder_args: the args to pass to the builder
         caplog_to_use: the capsys to capture log messages
         commander_config: specifies how the commander will run
+        commander_name: name of commander thread
         group_name: group_name to use
-        skip_join: if True, do not do the join of the thread app
+        scenario_driver_parms: args for scenario_driver_part_1
+
 
     """
-    scenarios_driver_parms = ScenarioDriverParms(
-        scenario_builder=scenario_builder,
-        scenario_builder_args=scenario_builder_args,
-        caplog_to_use=caplog_to_use,
-        log_ver=log_ver,
-        commander_config=commander_config,
-        commander_name=commander_name,
-        group_name=group_name,
-        skip_join=skip_join,
-    )
+    if scenario_driver_parms is None:
+        scenario_driver_parms = [
+            ScenarioDriverParms(
+                scenario_builder=scenario_builder,
+                scenario_builder_args=scenario_builder_args,
+                commander_config=commander_config,
+                commander_name=commander_name,
+                group_name=group_name,
+            )
+        ]
 
-    return scenario_driver_part1(
-        scenario_builder=scenario_builder,
-        scenario_builder_args=scenario_builder_args,
-        caplog_to_use=caplog_to_use,
-        log_ver=log_ver,
-        commander_config=commander_config,
-        commander_name=commander_name,
-        group_name=group_name,
-        skip_join=skip_join,
-    )
+    log_ver = LogVer(log_name=__name__)
+
+    config_vers: list[ConfigVerifier] = []
+    for sdparm in scenario_driver_parms:
+        msgs = Msgs()
+        config_ver = ConfigVerifier(
+            group_name=sdparm.group_name,
+            commander_name=sdparm.commander_name,
+            log_ver=log_ver,
+            caplog_to_use=caplog_to_use,
+            msgs=msgs,
+            max_msgs=10,
+        )
+        config_vers.append(config_ver)
+
+        scenario_driver_part1(
+            config_ver=config_ver,
+            scenario_builder=sdparm.scenario_builder,
+            scenario_builder_args=sdparm.scenario_builder_args,
+            caplog_to_use=caplog_to_use,
+            log_ver=log_ver,
+            commander_config=sdparm.commander_config,
+            commander_name=sdparm.commander_name,
+            group_name=sdparm.group_name,
+        )
+
+    for config_ver in config_vers:
+        scenario_driver_part2(config_ver=config_ver, caplog_to_use=caplog_to_use)
 
 
 ####################################################################
 # scenario_driver
 ####################################################################
-def scenario_driver_part1(sdp: ScenarioDriverParms) -> ConfigVerifier:
+def scenario_driver_part1(
+    config_ver: ConfigVerifier,
+    scenario_builder: Callable[..., None],
+    scenario_builder_args: dict[str, Any],
+    caplog_to_use: pytest.LogCaptureFixture,
+    log_ver: LogVer,
+    commander_config: AppConfig = AppConfig.ScriptStyle,
+    commander_name: str = "alpha",
+    group_name: str = "test1",
+) -> None:
     """Build and run a scenario.
 
     Args:
@@ -29482,29 +29510,29 @@ def scenario_driver_part1(sdp: ScenarioDriverParms) -> ConfigVerifier:
     # Set up log verification and start tests
     ################################################################
     # log_ver = LogVer(log_name=__name__)
-    sdp.log_ver.add_call_seq(name=sdp.commander_name, seq=get_formatted_call_sequence())
+    log_ver.add_call_seq(name=commander_name, seq=get_formatted_call_sequence())
 
     random.seed(42)
-    msgs = Msgs()
+    # msgs = Msgs()
 
-    config_ver = ConfigVerifier(
-        group_name=sdp.group_name,
-        commander_name=sdp.commander_name,
-        log_ver=sdp.log_ver,
-        caplog_to_use=sdp.caplog_to_use,
-        msgs=msgs,
-        max_msgs=10,
-    )
+    # config_ver = ConfigVerifier(
+    #     group_name=group_name,
+    #     commander_name=commander_name,
+    #     log_ver=log_ver,
+    #     caplog_to_use=caplog_to_use,
+    #     msgs=msgs,
+    #     max_msgs=10,
+    # )
 
-    config_ver.log_test_msg(f"mainline entered for {sdp.group_name=}")
-    config_ver.log_test_msg(f"scenario builder {sdp.group_name=}: {sdp.scenario_builder}")
-    config_ver.log_test_msg(f"scenario args {sdp.group_name=}: {sdp.scenario_builder_args}")
-    config_ver.log_test_msg(f"{sdp.commander_config=}")
+    config_ver.log_test_msg(f"mainline entered for {group_name=}")
+    config_ver.log_test_msg(f"scenario builder {group_name=}: {scenario_builder}")
+    config_ver.log_test_msg(f"scenario args {group_name=}: {scenario_builder_args}")
+    config_ver.log_test_msg(f"{commander_config=}")
 
-    config_ver.unregistered_names -= {sdp.commander_name}
-    config_ver.active_names |= {sdp.commander_name}
+    config_ver.unregistered_names -= {commander_name}
+    config_ver.active_names |= {commander_name}
 
-    sdp.scenario_builder(config_ver, **sdp.scenario_builder_args)
+    scenario_builder(config_ver, **scenario_builder_args)
 
     # config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
     config_ver.add_cmd(
@@ -29661,8 +29689,8 @@ def scenario_driver_part1(sdp: ScenarioDriverParms) -> ConfigVerifier:
         pe[PE.request_msg][req_key_exit] += 1
 
         outer_thread_app.smart_thread.smart_start()
-        if not skip_join:
-            outer_thread_app.join()
+        # if not skip_join:
+        #     outer_thread_app.join()
     elif commander_config == AppConfig.RemoteSmartThreadApp:
         outer_thread_app = OuterSmartThreadApp(
             config_ver=config_ver, name=commander_name, max_msgs=10
@@ -29752,11 +29780,6 @@ def scenario_driver_part1(sdp: ScenarioDriverParms) -> ConfigVerifier:
             "scenario_driver does not recognize " f"{commander_config=}"
         )
 
-    if not skip_join:
-        scenario_driver_part2(config_ver=config_ver, caplog_to_use=caplog_to_use)
-
-    return config_ver
-
 
 ####################################################################
 # scenario_driver
@@ -29772,10 +29795,14 @@ def scenario_driver_part2(
         caplog_to_use: the capsys to capture log messages
 
     """
-    ################################################################
-    # check that pending events are complete
-    ################################################################
+    ####################################################################
+    # wait for scenario to complete
+    ####################################################################
+    config_ver.all_threads[config_ver.commander_name].thread.join()
 
+    ####################################################################
+    # check that pending events are complete
+    ####################################################################
     if not config_ver.monitor_exit:
         config_ver.log_test_msg(
             f"Monitor Checkpoint: check_pending_events {config_ver.group_name} 42"
@@ -32998,24 +33025,12 @@ class TestSmartThreadRtns:
     @pytest.mark.parametrize("num_reg_0_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_alive_0_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stopped_0_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_reg_1_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_alive_1_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stopped_1_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_reg_2_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_alive_2_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stopped_2_arg", [0, 1, 2])
     def test_get_smart_thread_names_scenario(
         self,
         num_reg_0_arg: int,
         num_alive_0_arg: int,
         num_stopped_0_arg: int,
         caplog: pytest.LogCaptureFixture,
-        # num_reg_1_arg: int,
-        # num_alive_1_arg: int,
-        # num_stopped_1_arg: int,
-        # num_reg_2_arg: int,
-        # num_alive_2_arg: int,
-        # num_stopped_2_arg: int,
     ) -> None:
         """Test unregister scenarios.
 
@@ -33023,50 +33038,31 @@ class TestSmartThreadRtns:
             num_reg_0_arg: num group0 threads in registered state
             num_alive_0_arg: num group0 threads in alive state
             num_stopped_0_arg:num group0 threads in stopped state
-            num_reg_1_arg:num group0 threads in registered state
-            num_alive_1_arg:num group0 threads in registered state
-            num_stopped_1_arg:num group0 threads in registered state
-            num_reg_2_arg:num group0 threads in registered state
-            num_alive_2_arg:num group0 threads in registered state
-            num_stopped_2_arg:num group0 threads in registered state
             caplog: pytest fixture to capture log output
 
         """
+        sdparms: list[ScenarioDriverParms] = []
+        for idx in range(3):
+            args_for_scenario_builder: dict[str, Any] = {
+                "num_reg": num_reg_0_arg + idx,
+                "num_alive": num_alive_0_arg + idx,
+                "num_stopped": num_stopped_0_arg + idx,
+            }
 
-        args_for_scenario_builder: dict[str, Any] = {
-            "num_reg": num_reg_0_arg,
-            "num_alive": num_alive_0_arg,
-            "num_stopped": num_stopped_0_arg,
-        }
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_get_smart_thread_names_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig.RemoteThreadApp,
+                    commander_name=f"alpha{idx}",
+                    group_name=f"test{idx}",
+                )
+            )
 
-        log_ver = LogVer(log_name=__name__)
-        config_ver_1 = scenario_driver(
-            scenario_builder=ConfigVerifier.build_get_smart_thread_names_scenario,
-            scenario_builder_args=args_for_scenario_builder,
+        scenario_driver(
             caplog_to_use=caplog,
-            commander_config=AppConfig.RemoteThreadApp,
-            commander_name="alpha",
-            group_name="test1",
-            skip_join=True,
-            log_ver=log_ver,
+            scenario_driver_parms=sdparms,
         )
-
-        config_ver_2 = scenario_driver(
-            scenario_builder=ConfigVerifier.build_get_smart_thread_names_scenario,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog,
-            commander_config=AppConfig.RemoteThreadApp,
-            commander_name="alpha2",
-            group_name="test2",
-            skip_join=True,
-            log_ver=log_ver,
-        )
-
-        # thread_app.join()
-        config_ver_1.all_threads["alpha"].thread.join()
-        config_ver_2.all_threads["alpha2"].thread.join()
-        scenario_driver_part2(config_ver=config_ver_1, caplog_to_use=caplog)
-        scenario_driver_part2(config_ver=config_ver_2, caplog_to_use=caplog)
 
     ####################################################################
     # test_get_current_smart_thread
