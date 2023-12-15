@@ -3933,7 +3933,7 @@ class RegistryStatusLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                rf"name=[a-z0-9_]+, \({config_ver.group_name}\) is_alive=(True|False), "
+                rf"name=[a-z0-9_]+ \({config_ver.group_name}\), is_alive=(True|False), "
                 f"state={list_of_thread_states}, smart_thread="
             ),
             config_ver=config_ver,
@@ -20357,22 +20357,25 @@ class ConfigVerifier:
             rtn_name: name of rtn that will wait
 
         """
+        start_time = time.time()
         self.log_test_msg(f"wait_for_monitor {cmd_runner=} {rtn_name=}")
         with self.ops_lock:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
         self.log_test_msg(
-            f"{cmd_runner=} ({self.group_name}) {rtn_name} waiting for " f"monitor"
+            f"{cmd_runner=} ({self.group_name}) {rtn_name} waiting for monitor "
+            f"{start_time=}"
         )
         self.monitor_event.set()
         if self.cmd_waiting_event_items[cmd_runner].wait(timeout=60):
             with self.ops_lock:
                 del self.cmd_waiting_event_items[cmd_runner]
         else:
-            self.abort_all_f1_threads()
-            raise CmdTimedOut(
+            error_msg = (
                 f"wait_for_monitor timed out for {cmd_runner=} ({self.group_name}) "
-                f"and {rtn_name=}"
+                f"and {rtn_name=} {start_time=}"
             )
+            self.abort_all_f1_threads()
+            raise CmdTimedOut(error_msg)
 
     ####################################################################
     # handle_stopped_log_msg
@@ -29426,7 +29429,7 @@ class ScenarioDriverParms:
 def scenario_driver(
     caplog_to_use: pytest.LogCaptureFixture,
     scenario_builder: Callable[..., None] = ConfigVerifier.build_simple_scenario,
-    scenario_builder_args: dict[str, Any] = {},
+    scenario_builder_args: dict[str, Any] = None,
     commander_config: AppConfig = AppConfig.ScriptStyle,
     commander_name: str = "alpha",
     group_name: str = "test1",
@@ -29482,13 +29485,17 @@ def scenario_driver(
             group_name=sdparm.group_name,
         )
 
+    for idx, config_ver in enumerate(config_vers):
+        if scenario_driver_parms[idx].commander_config == AppConfig.RemoteThreadApp:
+            config_ver.all_threads[config_ver.commander_name].thread.join()
+
     for config_ver in config_vers:
         scenario_driver_part2(config_ver=config_ver, caplog_to_use=caplog_to_use)
 
 
-####################################################################
+########################################################################
 # scenario_driver
-####################################################################
+########################################################################
 def scenario_driver_part1(
     config_ver: ConfigVerifier,
     scenario_builder: Callable[..., None],
@@ -29524,10 +29531,11 @@ def scenario_driver_part1(
     #     max_msgs=10,
     # )
 
-    config_ver.log_test_msg(f"mainline entered for {group_name=}")
-    config_ver.log_test_msg(f"scenario builder {group_name=}: {scenario_builder}")
-    config_ver.log_test_msg(f"scenario args {group_name=}: {scenario_builder_args}")
-    config_ver.log_test_msg(f"{commander_config=}")
+    config_ver.log_test_msg(
+        f"scenario_driver_part1 entry: {commander_name=} "
+        f"{group_name=} {scenario_builder=} "
+        f"{scenario_builder_args=} {commander_config=}"
+    )
 
     config_ver.unregistered_names -= {commander_name}
     config_ver.active_names |= {commander_name}
@@ -29780,6 +29788,12 @@ def scenario_driver_part1(
             "scenario_driver does not recognize " f"{commander_config=}"
         )
 
+    config_ver.log_test_msg(
+        f"scenario_driver_part1 exit: {commander_name=} "
+        f"{group_name=} {scenario_builder=} "
+        f"{scenario_builder_args=} {commander_config=}"
+    )
+
 
 ####################################################################
 # scenario_driver
@@ -29795,10 +29809,15 @@ def scenario_driver_part2(
         caplog_to_use: the capsys to capture log messages
 
     """
+    config_ver.log_test_msg(
+        "scenario_driver_part2 entry: "
+        f"{config_ver.commander_name=} "
+        f"{config_ver.group_name=}"
+    )
     ####################################################################
     # wait for scenario to complete
     ####################################################################
-    config_ver.all_threads[config_ver.commander_name].thread.join()
+    # config_ver.all_threads[config_ver.commander_name].thread.join()
 
     ####################################################################
     # check that pending events are complete
@@ -30112,7 +30131,7 @@ class TestSmartThreadSmokeTest:
             (r"smart_init _register entry: beta \(test1\), target: beta"),
             (r"smart_init _clean_registry entry: beta \(test1\)"),
             (
-                r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+                r"name=alpha \(test1\), is_alive=True, state=ThreadState.Alive, "
                 r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
                 r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
@@ -30288,12 +30307,12 @@ class TestSmartThreadSmokeTest:
             ),
             (r"smart_join _clean_registry entry: alpha \(test1\)"),
             (
-                r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+                r"name=alpha \(test1\), is_alive=True, state=ThreadState.Alive, "
                 r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
                 r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
             (
-                r"name=beta, is_alive=False, state=ThreadState.Stopped, "
+                r"name=beta \(test1\), is_alive=False, state=ThreadState.Stopped, "
                 r"smart_thread=SmartThread\(name='beta', group_name=test1, "
                 r"name=beta, target_rtn=f1, args=\('beta',\), auto_start=True, "
                 r"max_msgs=10\)"
@@ -30361,7 +30380,7 @@ class TestSmartThreadSmokeTest:
             (r"smart_init _register entry: beta \(test1\), target: beta"),
             (r"smart_init _clean_registry entry: beta \(test1\)"),
             (
-                r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+                r"name=alpha \(test1\), is_alive=True, state=ThreadState.Alive, "
                 r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
                 r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
@@ -30422,12 +30441,12 @@ class TestSmartThreadSmokeTest:
             ),
             (r"smart_unreg _clean_registry entry: alpha \(test1\)"),
             (
-                r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+                r"name=alpha \(test1\), is_alive=True, state=ThreadState.Alive, "
                 r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
                 r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
             (
-                r"name=beta, is_alive=False, state=ThreadState.Registered, "
+                r"name=beta \(test1\), is_alive=False, state=ThreadState.Registered, "
                 r"smart_thread=SmartThread\(name='beta', group_name=test1, "
                 r"name=beta, target_rtn=f1, args=\('beta',\), auto_start=False, "
                 r"max_msgs=0\)"

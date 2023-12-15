@@ -1478,7 +1478,7 @@ class SmartThread:
                 )
                 state = ThreadState.Stopped
             logger.debug(
-                f"name={key}, ({self.group_name}) {is_alive=}, state={state}, "
+                f"name={key} ({self.group_name}), {is_alive=}, state={state}, "
                 f"smart_thread={item}"
             )
 
