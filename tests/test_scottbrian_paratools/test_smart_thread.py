@@ -24362,8 +24362,6 @@ class CommanderCurrentApp:
             max_msgs=max_msgs,
         )
 
-        # self.config_ver.commander_thread = self.smart_thread
-
     def run(self) -> None:
         """Run the test."""
         self.config_ver.main_driver()
@@ -24570,7 +24568,7 @@ num_commander_configs = len(commander_config)
 ########################################################################
 @pytest.mark.cover
 class TestSmartThreadInterface:
-    """Test class for SmartThread example tests."""
+    """Test class for SmartThread interface tests."""
 
     ####################################################################
     # test_smart_thread_interface_1
@@ -24613,7 +24611,7 @@ class TestSmartThreadInterface:
         ],
     )
     def test_smart_thread_interface_1(self, num_f1_args: tuple[int, int, int]) -> None:
-        """Test smart_send example 1 with no parms.
+        """Test SmartThread interface.
 
         Args:
             num_f1_args: number of arguments to specify
@@ -25380,7 +25378,7 @@ class TestSmartThreadInterface:
         num_f1_args: tuple[int, int, int],
         group_names_arg: tuple[str],
     ) -> None:
-        """Test smart_send example 1 with no parms.
+        """Test SmartThread interface.
 
         Args:
             num_f1_args: number of arguments to specify
@@ -26309,7 +26307,7 @@ class TestSmartThreadInterface:
         ],
     )
     def test_smart_thread_interface_2(self, num_f1_args: tuple[int, int, int]) -> None:
-        """Test smart_send example 2 with no parms.
+        """Test SmartThread interface.
 
         Args:
             num_f1_args: number of arguments to specify
@@ -26923,7 +26921,7 @@ class TestSmartThreadInterface:
         num_f1_args: tuple[int, int, int],
         group_names_arg: tuple[str],
     ) -> None:
-        """Test smart_send example 2 with various parms with groups.
+        """Test SmartThread interface.
 
         Args:
             num_f1_args: number of arguments to specify
@@ -27413,9 +27411,7 @@ class TestSmartThreadInterface:
 
         beta_smart_thread: list[SmartThread] = []
 
-        f1_target_to_specify = (
-            f"f1_" f"{num_f1_args[0]}_" f"{num_f1_args[1]}_" f"{num_f1_args[2]}"
-        )
+        f1_target_to_specify = f"f1_{num_f1_args[0]}_{num_f1_args[1]}_{num_f1_args[2]}"
 
         smart_thread_name_to_specify = None
         # args_to_specify = None
@@ -27594,7 +27590,7 @@ class TestSmartThreadInterface:
         ],
     )
     def test_smart_thread_interface_3(self, num_f1_args: tuple[int, int, int]) -> None:
-        """Test smart_send example 3 with no parms.
+        """Test SmartThread interface.
 
         Args:
             num_f1_args: number of arguments to specify
@@ -27912,6 +27908,531 @@ class TestSmartThreadInterface:
         logger.debug("mainline exiting")
 
     ####################################################################
+    # test_smart_thread_interface_3b
+    ####################################################################
+    @pytest.mark.parametrize(
+        "num_f1_args",
+        [
+            (0, 0, 0),
+            (0, 0, 1),
+            (0, 0, 2),
+            (0, 0, 3),
+            (0, 1, 0),
+            (0, 1, 1),
+            (0, 1, 2),
+            (0, 1, 3),
+            (0, 2, 0),
+            (0, 2, 1),
+            (0, 2, 2),
+            (0, 2, 3),
+            (0, 3, 0),
+            (0, 3, 1),
+            (0, 3, 2),
+            (0, 3, 3),
+            (1, 0, 0),
+            (1, 0, 1),
+            (1, 0, 2),
+            (1, 0, 3),
+            (1, 1, 0),
+            (1, 1, 1),
+            (1, 1, 2),
+            (1, 1, 3),
+            (1, 2, 0),
+            (1, 2, 1),
+            (1, 2, 2),
+            (1, 2, 3),
+            (1, 3, 0),
+            (1, 3, 1),
+            (1, 3, 2),
+            (1, 3, 3),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "group_names_arg",
+        [
+            ("test1",),
+            ("test1", "test2"),
+            ("test1", "test2", "test3"),
+        ],
+    )
+    def test_smart_thread_interface_3b(
+        self,
+        num_f1_args: tuple[int, int, int],
+        group_names_arg: tuple[str],
+    ) -> None:
+        """Test SmartThread interface.
+
+        Args:
+            num_f1_args: number of arguments to specify
+            group_names_arg: group_names to use to create SmartThread
+                instances
+        """
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        class ReqParms(TypedDict):
+            kwarg1: NotRequired[int]
+            kwarg2: NotRequired[str]
+            kwarg3: NotRequired[list[int]]
+            smart_thread: NotRequired[SmartThread]
+
+        def f1(*args: Union[int, str, list[int]], **kwargs: Unpack[ReqParms]) -> None:
+            logger.debug("f1 beta entry")
+
+            exp_args = (0, 42, "my arg 2", [1, 2, 3])
+            exp_kwargs = {
+                "kwarg1": 13,
+                "kwarg2": "second kwarg",
+                "kwarg3": [11, 22, 33],
+            }
+            args_str = ""
+            comma = ""
+            for idx, arg in enumerate(args, 1):
+                args_str = f"{args_str}{comma}arg{idx}={arg}"
+                comma = ", "
+                assert arg == exp_args[idx]
+            if args_str:
+                logger.debug(args_str)
+
+            smart_thread_arg = False
+            kwargs_str = ""
+            comma = ""
+            a_smart_thread: SmartThread
+            if "smart_thread" in kwargs:
+                a_smart_thread = kwargs["smart_thread"]
+            for key, value in kwargs.items():
+                if key == "smart_thread":
+                    smart_thread_arg = True
+                    # smart_thread = value
+                else:
+                    kwargs_str = f"{kwargs_str}{comma}{key}={value}"
+                    comma = ", "
+                    assert exp_kwargs[key] == value
+            if kwargs_str:
+                logger.debug(kwargs_str)
+
+            if smart_thread_arg:
+                logger.debug(f"{a_smart_thread=}")
+                wait_for(
+                    lambda: a_smart_thread.get_state(
+                        group_name=a_smart_thread.group_name, name="beta"
+                    )
+                    == ThreadState.Alive
+                )
+
+            logger.debug("f1 beta exit")
+
+        logger.debug("mainline entered")
+
+        alpha_smart_thread: list[SmartThread] = []
+
+        for group_name in group_names_arg:
+            alpha_smart_thread.append(SmartThread(group_name=group_name, name="alpha"))
+
+        beta_smart_thread: list[SmartThread] = []
+
+        if num_f1_args == (0, 0, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                    )
+                )
+        elif num_f1_args == (0, 0, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42,),
+                    )
+                )
+        elif num_f1_args == (0, 0, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2"),
+                    )
+                )
+        elif num_f1_args == (0, 0, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2", [1, 2, 3]),
+                    )
+                )
+        elif num_f1_args == (0, 1, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (0, 1, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42,),
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (0, 1, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2"),
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (0, 1, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2", [1, 2, 3]),
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (0, 2, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (0, 2, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42,),
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (0, 2, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2"),
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (0, 2, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2", [1, 2, 3]),
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (0, 3, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+        elif num_f1_args == (0, 3, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42,),
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+        elif num_f1_args == (0, 3, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2"),
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+        elif num_f1_args == (0, 3, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        args=(42, "my arg 2", [1, 2, 3]),
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+        elif num_f1_args == (1, 0, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                    )
+                )
+        elif num_f1_args == (1, 0, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42,),
+                    )
+                )
+        elif num_f1_args == (1, 0, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2"),
+                    )
+                )
+        elif num_f1_args == (1, 0, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2", [1, 2, 3]),
+                    )
+                )
+        elif num_f1_args == (1, 1, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (1, 1, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42,),
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (1, 1, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2"),
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (1, 1, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2", [1, 2, 3]),
+                        kwargs={"kwarg1": 13},
+                    )
+                )
+        elif num_f1_args == (1, 2, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (1, 2, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42,),
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (1, 2, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2"),
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (1, 2, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2", [1, 2, 3]),
+                        kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
+                    )
+                )
+        elif num_f1_args == (1, 3, 0):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+        elif num_f1_args == (1, 3, 1):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42,),
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+        elif num_f1_args == (1, 3, 2):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2"),
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+        elif num_f1_args == (1, 3, 3):
+            for group_name in group_names_arg:
+                beta_smart_thread.append(
+                    SmartThread(
+                        group_name=group_name,
+                        name="beta",
+                        target_rtn=f1,
+                        thread_parm_name="smart_thread",
+                        args=(42, "my arg 2", [1, 2, 3]),
+                        kwargs={
+                            "kwarg1": 13,
+                            "kwarg2": "second kwarg",
+                            "kwarg3": [11, 22, 33],
+                        },
+                    )
+                )
+
+        thread_state = ThreadState.Alive
+        for group_name in reversed(group_names_arg):
+            wait_for(
+                lambda: SmartThread.get_state(group_name=group_name, name="beta")
+                == thread_state
+            )
+            # thread_state = ThreadState.Stopped
+
+        for idx, group_name in enumerate(group_names_arg):
+            alpha_smart_thread[idx].smart_join(targets="beta")
+            assert (
+                SmartThread.get_state(group_name=group_name, name="beta")
+                == ThreadState.Unregistered
+            )
+
+        logger.debug("mainline exiting")
+
+    ####################################################################
     # test_smart_thread_interface_4
     ####################################################################
     @pytest.mark.parametrize(
@@ -27952,7 +28473,7 @@ class TestSmartThreadInterface:
         ],
     )
     def test_smart_thread_interface_4(self, num_f1_args: tuple[int, int, int]) -> None:
-        """Test smart_send example 4 with no parms.
+        """Test SmartThread interface.
 
         Args:
             num_f1_args: number of arguments to specify
@@ -28053,6 +28574,181 @@ class TestSmartThreadInterface:
             beta_smart_thread.get_state(group_name="test1", name="beta")
             == ThreadState.Unregistered
         )
+        logger.debug("mainline exiting")
+
+    ####################################################################
+    # test_smart_thread_interface_4b
+    ####################################################################
+    @pytest.mark.parametrize(
+        "num_f1_args",
+        [
+            (0, 0, 0),
+            (0, 0, 1),
+            (0, 0, 2),
+            (0, 0, 3),
+            (0, 1, 0),
+            (0, 1, 1),
+            (0, 1, 2),
+            (0, 1, 3),
+            (0, 2, 0),
+            (0, 2, 1),
+            (0, 2, 2),
+            (0, 2, 3),
+            (0, 3, 0),
+            (0, 3, 1),
+            (0, 3, 2),
+            (0, 3, 3),
+            (1, 0, 0),
+            (1, 0, 1),
+            (1, 0, 2),
+            (1, 0, 3),
+            (1, 1, 0),
+            (1, 1, 1),
+            (1, 1, 2),
+            (1, 1, 3),
+            (1, 2, 0),
+            (1, 2, 1),
+            (1, 2, 2),
+            (1, 2, 3),
+            (1, 3, 0),
+            (1, 3, 1),
+            (1, 3, 2),
+            (1, 3, 3),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "group_names_arg",
+        [
+            ("test1",),
+            ("test1", "test2"),
+            ("test1", "test2", "test3"),
+        ],
+    )
+    def test_smart_thread_interface_4b(
+        self,
+        num_f1_args: tuple[int, int, int],
+        group_names_arg: tuple[str],
+    ) -> None:
+        """Test SmartThread interface.
+
+        Args:
+            num_f1_args: number of arguments to specify
+            group_names_arg: group_names to use to create SmartThread
+                instances
+        """
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        def f1(
+            *args: Union[int, str, list[int]],
+            kwarg1: Optional[int] = None,
+            kwarg2: Optional[str] = None,
+            kwarg3: Optional[list[int]] = None,
+            smart_thread: Optional[SmartThread] = None,
+        ) -> None:
+            logger.debug("f1 beta entry")
+
+            exp_args = (0, 42, "my arg 2", [1, 2, 3])
+            exp_kwargs = {
+                "kwarg1": 13,
+                "kwarg2": "second kwarg",
+                "kwarg3": [11, 22, 33],
+            }
+            args_str = ""
+            comma = ""
+            # The first element in exp_args is ignored so we start idx
+            # at 1. This make the log message look better since it will
+            # show arg2 as "my arg 2".
+            for idx, arg in enumerate(args, 1):
+                args_str = f"{args_str}{comma}arg{idx}={arg}"
+                comma = ", "
+                assert arg == exp_args[idx]
+            if args_str:
+                logger.debug(args_str)
+
+            kwargs_str = ""
+            if kwarg1:
+                kwargs_str = f"{kwargs_str}{kwarg1=}"
+                assert kwarg1 == exp_kwargs["kwarg1"]
+            if kwarg2:
+                kwargs_str = f"{kwargs_str}, {kwarg2=}"
+                assert kwarg2 == exp_kwargs["kwarg2"]
+            if kwarg3:
+                kwargs_str = f"{kwargs_str}, {kwarg3=}"
+                assert kwarg3 == exp_kwargs["kwarg3"]
+
+            if kwargs_str:
+                logger.debug(kwargs_str)
+
+            if smart_thread:
+                logger.debug(f"{smart_thread=}")
+                wait_for(
+                    lambda: smart_thread.get_state(
+                        group_name=smart_thread.group_name, name="beta"
+                    )
+                    == ThreadState.Alive
+                )
+
+            logger.debug("f1 beta exit")
+
+        logger.debug("mainline entered")
+        alpha_smart_thread: list[SmartThread] = []
+
+        for group_name in group_names_arg:
+            alpha_smart_thread.append(SmartThread(group_name=group_name, name="alpha"))
+
+        beta_smart_thread: list[SmartThread] = []
+
+        smart_thread_name_to_specify = None
+        args_to_specify: Optional[tuple[Any, ...]] = None
+        kwargs_to_specify: Optional[dict[str, Any]]
+        if num_f1_args[0] == 1:
+            smart_thread_name_to_specify = "smart_thread"
+
+        if num_f1_args[1] == 0:
+            kwargs_to_specify = None
+        else:
+            kwargs_to_specify = {"kwarg1": 13}
+            if num_f1_args[1] >= 2:
+                kwargs_to_specify["kwarg2"] = "second kwarg"
+            if num_f1_args[1] == 3:
+                kwargs_to_specify["kwarg3"] = [11, 22, 33]
+
+        if num_f1_args[2] == 1:
+            args_to_specify = (42,)
+        if num_f1_args[2] >= 2:
+            args_to_specify = (42, "my arg 2")
+        if num_f1_args[2] == 3:
+            args_to_specify = (42, "my arg 2", [1, 2, 3])
+
+        for group_name in group_names_arg:
+            beta_smart_thread.append(
+                SmartThread(
+                    group_name=group_name,
+                    name="beta",
+                    target_rtn=f1,
+                    thread_parm_name=smart_thread_name_to_specify,
+                    args=args_to_specify,
+                    kwargs=kwargs_to_specify,
+                )
+            )
+
+        thread_state = ThreadState.Alive
+        for group_name in reversed(group_names_arg):
+            wait_for(
+                lambda: beta_smart_thread[0].get_state(
+                    group_name=group_name, name="beta"
+                )
+                == thread_state
+            )
+            # thread_state = ThreadState.Stopped
+
+        for idx, group_name in enumerate(group_names_arg):
+            alpha_smart_thread[idx].smart_join(targets="beta")
+            assert (
+                SmartThread.get_state(group_name=group_name, name="beta")
+                == ThreadState.Unregistered
+            )
+
         logger.debug("mainline exiting")
 
 
