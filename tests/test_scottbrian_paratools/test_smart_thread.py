@@ -20955,7 +20955,7 @@ class ConfigVerifier:
                     .thread
                 )
                 test_name = self.get_smart_thread_name(
-                    search_thread=search_thread, group_name="test1"
+                    search_thread=search_thread, group_name=self.group_name
                 )
                 if test_name != pos_name:
                     save_pos = st.SmartThread._registry[
@@ -20976,7 +20976,7 @@ class ConfigVerifier:
                             .thread
                         )
                         test_name = self.get_smart_thread_name(
-                            search_thread=search_thread, group_name="test1"
+                            search_thread=search_thread, group_name=self.group_name
                         )
                         if test_name == pos_name:
                             new_pos = st.SmartThread._registry[
@@ -21055,7 +21055,7 @@ class ConfigVerifier:
                     self.group_name
                 ].registry_lock.owner_wait_q:
                     lock_name = self.get_smart_thread_name(
-                        search_thread=lock_item.thread, group_name="test1"
+                        search_thread=lock_item.thread, group_name=self.group_name
                     )
                     lock_positions.append(lock_name)
                 self.log_test_msg(f"lock_verify: {lock_positions=}")
@@ -21065,16 +21065,19 @@ class ConfigVerifier:
             if not lock_verified:
                 if (time.time() - start_time) > timeout_value:
                     self.abort_all_f1_threads()
+                    owner_wait_q = st.SmartThread._registry[
+                        self.group_name
+                    ].registry_lock.owner_wait_q
                     raise FailedLockVerify(
                         f"lock_verify from {line_num=} timed out after"
                         f" {timeout_value} seconds waiting for match of \n"
                         f"{exp_positions=}\n"
                         f"{lock_positions=}\n"
-                        f"{st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q=} "
+                        f"{owner_wait_q=} "
                     )
                 time.sleep(0.2)
         self.log_test_msg(
-            f"lock_verify exit: {cmd_runner=}, " f"{exp_positions=}, {line_num=}"
+            f"lock_verify exit: {cmd_runner=}, {exp_positions=}, {line_num=}"
         )
 
     ####################################################################
@@ -22576,7 +22579,7 @@ class ConfigVerifier:
         ################################################################
         # get first config_cmd smart_recv log msg
         ################################################################
-        group_name = "test1"
+        group_name = self.group_name
         search_msg = (
             rf"config_cmd: {self.group_name} RecvMsg\(serial=[0-9]+, line=[0-9]+, "
             f"cmd_runners='{receiver_names[0]}', "
@@ -24148,7 +24151,7 @@ class ConfigVerifier:
         ################################################################
         # find entered refresh pair array log msg
         ################################################################
-        group_name = "test1"
+        group_name = self.group_name
         search_msg = (
             f"{request_type.value} _clean_pair_array entry: {cmd_runner} "
             rf"\({group_name}\)"
@@ -34591,53 +34594,48 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_basic_scenario
     ####################################################################
-    @pytest.mark.parametrize("num_syncers_arg", [2, 3, 4])
-    @pytest.mark.parametrize("num_extras_arg", [0, 1, 2])
     def test_sync_basic_scenario(
         self,
-        num_syncers_arg: int,
-        num_extras_arg: int,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            num_syncers_arg: number of threads doing sync
-            num_extras_arg: number of extra threads not involved in the
-                sync request
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "num_syncers": num_syncers_arg,
-            "num_extras": num_extras_arg,
-        }
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for num_syncers_arg in (2, 3, 4):
+            for num_extras_arg in (0, 1, 2):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "num_syncers": num_syncers_arg,
+                    "num_extras": num_extras_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_sync_basic_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_basic_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_pending_sans_sync_scenario
     ####################################################################
-    @pytest.mark.parametrize(
-        "request_type_arg",
-        [
-            st.ReqType.Smart_send,
-            st.ReqType.Smart_recv,
-            st.ReqType.Smart_wait,
-            st.ReqType.Smart_resume,
-        ],
-    )
-    @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
     def test_pending_sans_sync_scenario(
         self,
-        request_type_arg: st.ReqType,
-        pending_request_tf_arg: bool,
         pending_msg_count_arg: int,
         pending_wait_tf_arg: bool,
         caplog: pytest.LogCaptureFixture,
@@ -34645,119 +34643,159 @@ class TestSmartBasicScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            request_type_arg: request type that is to get the pending
-                flags set on it
-            pending_request_tf_arg: if True, pending_request flag is to
-                be set
             pending_msg_count_arg: number of msgs to be placed on the
                 pending thread
             pending_wait_tf_arg: if True, pending_wait flag is to be set
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "request_type": request_type_arg,
-            "pending_request_tf": pending_request_tf_arg,
-            "pending_msg_count": pending_msg_count_arg,
-            "pending_wait_tf": pending_wait_tf_arg,
-        }
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for request_type_arg in (
+            st.ReqType.Smart_send,
+            st.ReqType.Smart_recv,
+            st.ReqType.Smart_wait,
+            st.ReqType.Smart_resume,
+        ):
+            for pending_request_tf_arg in (True, False):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "request_type": request_type_arg,
+                    "pending_request_tf": pending_request_tf_arg,
+                    "pending_msg_count": pending_msg_count_arg,
+                    "pending_wait_tf": pending_wait_tf_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_pending_sans_sync_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_pending_sans_sync_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_pending_sync_only_scenario
     ####################################################################
-    @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
-    @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_sync_tf_arg", [True, False])
     def test_pending_sync_only_scenario(
         self,
-        pending_msg_count_arg: int,
-        pending_wait_tf_arg: bool,
         pending_sync_tf_arg: bool,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            pending_msg_count_arg: number of msgs to be placed on the
-                pending thread
-            pending_wait_tf_arg: if True, pending_wait flag is to be set
             pending_sync_tf_arg: if True, pending_sync flag is to be set
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "pending_msg_count": pending_msg_count_arg,
-            "pending_wait_tf": pending_wait_tf_arg,
-            "pending_sync_tf": pending_wait_tf_arg,
-        }
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for pending_msg_count_arg in (0, 1, 2):
+            for pending_wait_tf_arg in (True, False):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "pending_msg_count": pending_msg_count_arg,
+                    "pending_wait_tf": pending_wait_tf_arg,
+                    "pending_sync_tf": pending_wait_tf_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_pending_sync_only_scenarios,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_pending_sync_only_scenarios,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_remove_reasons_scenario
     ####################################################################
-    @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
-    @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_sync_tf_arg", [True, False])
     def test_remove_reasons_scenario(
         self,
-        pending_msg_count_arg: int,
-        pending_wait_tf_arg: bool,
         pending_sync_tf_arg: bool,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            pending_msg_count_arg: number of msgs to be placed on the
-                pending thread
-            pending_wait_tf_arg: if True, pending_wait flag is to be set
             pending_sync_tf_arg: if True, pending_sync flag is to be set
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "pending_msg_count": pending_msg_count_arg,
-            "pending_wait_tf": pending_wait_tf_arg,
-            "pending_sync_tf": pending_sync_tf_arg,
-        }
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for pending_msg_count_arg in (0, 1, 2):
+            for pending_wait_tf_arg in (True, False):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "pending_msg_count": pending_msg_count_arg,
+                    "pending_wait_tf": pending_wait_tf_arg,
+                    "pending_sync_tf": pending_sync_tf_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_remove_reasons_scenarios,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_remove_reasons_scenarios,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_backout_sync_remote_scenario
     ####################################################################
-    @pytest.mark.parametrize("num_pending_arg", [1, 2, 3])
     def test_backout_sync_remote_scenario(
-        self, num_pending_arg: int, caplog: pytest.LogCaptureFixture
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            num_pending_arg: number of pending threads
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {"num_pending": num_pending_arg}
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for num_pending_arg in (1, 2, 3):
+            config_idx += 1
+            args_for_scenario_builder: dict[str, Any] = {"num_pending": num_pending_arg}
+
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_backout_sync_remote_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_backout_sync_remote_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -34959,13 +34997,11 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_partial_scenario
     ####################################################################
-    @pytest.mark.parametrize("sync_0_targets_arg", [2, 4, 6, 8, 10, 12, 14])
     @pytest.mark.parametrize("sync_1_targets_arg", [1, 4, 5, 8, 9, 12, 13])
     @pytest.mark.parametrize("sync_2_targets_arg", [1, 2, 3, 8, 9, 10, 11])
     @pytest.mark.parametrize("sync_3_targets_arg", [1, 2, 3, 4, 5, 6, 7])
     def test_sync_partial_scenario(
         self,
-        sync_0_targets_arg: int,
         sync_1_targets_arg: int,
         sync_2_targets_arg: int,
         sync_3_targets_arg: int,
@@ -34974,7 +35010,6 @@ class TestSmartBasicScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            sync_0_targets_arg: targets combo
             sync_1_targets_arg: targets combo
             sync_2_targets_arg: targets combo
             sync_3_targets_arg: targets combo
@@ -34985,17 +35020,30 @@ class TestSmartBasicScenarios:
                a partial or full sync of all targets is done
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "sync_0_targets": sync_0_targets_arg,
-            "sync_1_targets": sync_1_targets_arg,
-            "sync_2_targets": sync_2_targets_arg,
-            "sync_3_targets": sync_3_targets_arg,
-        }
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for sync_0_targets_arg in (2, 4, 6, 8, 10, 12, 14):
+            config_idx += 1
+            args_for_scenario_builder: dict[str, Any] = {
+                "sync_0_targets": sync_0_targets_arg,
+                "sync_1_targets": sync_1_targets_arg,
+                "sync_2_targets": sync_2_targets_arg,
+                "sync_3_targets": sync_3_targets_arg,
+            }
+
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_sync_partial_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_partial_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
 
