@@ -35056,11 +35056,6 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_join_timeout_scenario
     ####################################################################
-    @pytest.mark.parametrize(
-        "timeout_type_arg",
-        [TimeoutType.TimeoutNone, TimeoutType.TimeoutFalse, TimeoutType.TimeoutTrue],
-    )
-    @pytest.mark.parametrize("num_active_no_target_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_no_delay_exit_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_exit_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
@@ -35069,8 +35064,6 @@ class TestSmartThreadComboScenarios:
     # @pytest.mark.skip(reason="not now")
     def test_join_timeout_scenario(
         self,
-        timeout_type_arg: TimeoutType,
-        num_active_no_target_arg: int,
         num_no_delay_exit_arg: int,
         num_delay_exit_arg: int,
         num_delay_unreg_arg: int,
@@ -35081,11 +35074,6 @@ class TestSmartThreadComboScenarios:
         """Test error cases in the _regref remote array method.
 
         Args:
-            timeout_type_arg: specifies whether the smart_join should
-                be coded with timeout and whether the smart_join should
-                succeed or fail with a timeout
-            num_active_no_target_arg: number of threads that should be
-                active and stay active during the join as non-targets
             num_no_delay_exit_arg: number of threads that should be
                 active and targeted for join, and then exited
                 immediately to allow the join to succeed
@@ -35113,8 +35101,6 @@ class TestSmartThreadComboScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        assert num_active_no_target_arg > 0
-
         delay_arg_counts = (
             num_no_delay_exit_arg
             + num_delay_exit_arg
@@ -35123,93 +35109,103 @@ class TestSmartThreadComboScenarios:
             + num_delay_reg_arg
         )
 
-        if timeout_type_arg == TimeoutType.TimeoutNone:
-            if delay_arg_counts == 0:
-                return
-        else:
-            if (num_delay_exit_arg + num_delay_reg_arg) == 0:
-                return
+        # timeout_type_arg: specifies whether the smart_join should
+        #     be coded with timeout and whether the smart_join should
+        #     succeed or fail with a timeout
+        # num_active_no_target_arg: number of threads that should be
+        #     active and stay active during the join as non-targets
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for timeout_type_arg in (
+            TimeoutType.TimeoutNone,
+            TimeoutType.TimeoutFalse,
+            TimeoutType.TimeoutTrue,
+        ):
+            if timeout_type_arg == TimeoutType.TimeoutNone:
+                if delay_arg_counts == 0:
+                    continue
+            else:
+                if (num_delay_exit_arg + num_delay_reg_arg) == 0:
+                    continue
+            for num_active_no_target_arg in (1, 2, 3):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "timeout_type": timeout_type_arg,
+                    "num_active_no_target": num_active_no_target_arg,
+                    "num_no_delay_exit": num_no_delay_exit_arg,
+                    "num_delay_exit": num_delay_exit_arg,
+                    "num_delay_unreg": num_delay_unreg_arg,
+                    "num_no_delay_reg": num_no_delay_reg_arg,
+                    "num_delay_reg": num_delay_reg_arg,
+                }
 
-        args_for_scenario_builder: dict[str, Any] = {
-            "timeout_type": timeout_type_arg,
-            "num_active_no_target": num_active_no_target_arg,
-            "num_no_delay_exit": num_no_delay_exit_arg,
-            "num_delay_exit": num_delay_exit_arg,
-            "num_delay_unreg": num_delay_unreg_arg,
-            "num_no_delay_reg": num_no_delay_reg_arg,
-            "num_delay_reg": num_delay_reg_arg,
-        }
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_join_timeout_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_join_timeout_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[
-                (num_active_no_target_arg + delay_arg_counts) % num_commander_configs
-            ],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_def_del_scenarios
     ####################################################################
-    def_del_scenario_arg_list = [
-        DefDelScenario.NormalRecv,
-        DefDelScenario.NormalWait,
-        DefDelScenario.ResurrectionRecv,
-        DefDelScenario.ResurrectionWait,
-        DefDelScenario.Recv0Recv1,
-        DefDelScenario.Recv1Recv0,
-        DefDelScenario.Wait0Wait1,
-        DefDelScenario.Wait1Wait0,
-        DefDelScenario.RecvWait,
-        DefDelScenario.WaitRecv,
-        DefDelScenario.RecvDel,
-        DefDelScenario.RecvAdd,
-        DefDelScenario.WaitDel,
-        DefDelScenario.WaitAdd,
-    ]
-
-    @pytest.mark.parametrize("def_del_scenario_arg", def_del_scenario_arg_list)
-    def test_def_del_scenarios(
-        self, def_del_scenario_arg: DefDelScenario, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_def_del_scenarios(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            def_del_scenario_arg: specifies the type of test to do
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "def_del_scenario": def_del_scenario_arg
-        }
+        # def_del_scenario_arg: specifies the type of test to do
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for def_del_scenario_arg in (
+            DefDelScenario.NormalRecv,
+            DefDelScenario.NormalWait,
+            DefDelScenario.ResurrectionRecv,
+            DefDelScenario.ResurrectionWait,
+            DefDelScenario.Recv0Recv1,
+            DefDelScenario.Recv1Recv0,
+            DefDelScenario.Wait0Wait1,
+            DefDelScenario.Wait1Wait0,
+            DefDelScenario.RecvWait,
+            DefDelScenario.WaitRecv,
+            DefDelScenario.RecvDel,
+            DefDelScenario.RecvAdd,
+            DefDelScenario.WaitDel,
+            DefDelScenario.WaitAdd,
+        ):
+            config_idx += 1
+            args_for_scenario_builder: dict[str, Any] = {
+                "def_del_scenario": def_del_scenario_arg
+            }
+
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_def_del_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_def_del_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[
-                def_del_scenario_arg.value % num_commander_configs
-            ],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_rotate_state_scenarios
     ####################################################################
-    @pytest.mark.parametrize(
-        "timeout_type_arg",
-        [TimeoutType.TimeoutNone, TimeoutType.TimeoutFalse, TimeoutType.TimeoutTrue],
-    )
-    @pytest.mark.parametrize(
-        "req0_arg",
-        [
-            st.ReqType.Smart_send,
-            st.ReqType.Smart_recv,
-            st.ReqType.Smart_resume,
-            st.ReqType.Smart_sync,
-            st.ReqType.Smart_wait,
-        ],
-    )
     @pytest.mark.parametrize(
         "req1_arg",
         [
@@ -35235,8 +35231,6 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("req1_lap_arg_arg", [0, 1])
     def test_rotate_state_scenarios(
         self,
-        timeout_type_arg: TimeoutType,
-        req0_arg: st.ReqType,
         req1_arg: st.ReqType,
         req0_when_req1_state_arg: tuple[st.ThreadState, int],
         req0_when_req1_lap_arg: int,
@@ -35246,10 +35240,6 @@ class TestSmartThreadComboScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the SmartRequest should
-                be coded with timeout and whether the SmartRequest
-                should succeed or fail with a timeout
-            req0_arg: the SmartRequest that req0 will make
             req1_arg: the SmartRequest that req1 will make
             req0_when_req1_state_arg: req0 will issue SmartRequest when
                 req1 transitions to this state
@@ -35260,30 +35250,52 @@ class TestSmartThreadComboScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "timeout_type": timeout_type_arg,
-            "req0": req0_arg,
-            "req1": req1_arg,
-            "req0_when_req1_state": req0_when_req1_state_arg,
-            "req0_when_req1_lap": req0_when_req1_lap_arg,
-            "req1_lap": req1_lap_arg_arg,
-        }
+        # timeout_type_arg: specifies whether the SmartRequest should
+        #     be coded with timeout and whether the SmartRequest
+        #     should succeed or fail with a timeout
+        # req0_arg: the SmartRequest that req0 will make
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for timeout_type_arg in (
+            TimeoutType.TimeoutNone,
+            TimeoutType.TimeoutFalse,
+            TimeoutType.TimeoutTrue,
+        ):
+            for req0_arg in (
+                st.ReqType.Smart_send,
+                st.ReqType.Smart_recv,
+                st.ReqType.Smart_resume,
+                st.ReqType.Smart_sync,
+                st.ReqType.Smart_wait,
+            ):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "timeout_type": timeout_type_arg,
+                    "req0": req0_arg,
+                    "req1": req1_arg,
+                    "req0_when_req1_state": req0_when_req1_state_arg,
+                    "req0_when_req1_lap": req0_when_req1_lap_arg,
+                    "req1_lap": req1_lap_arg_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_rotate_state_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_rotate_state_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=AppConfig.ScriptStyle,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_send_msg_timeout_scenarios
     ####################################################################
-    @pytest.mark.parametrize(
-        "timeout_type_arg",
-        [TimeoutType.TimeoutNone, TimeoutType.TimeoutFalse, TimeoutType.TimeoutTrue],
-    )
-    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
@@ -35291,8 +35303,6 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
     def test_send_msg_timeout_scenarios(
         self,
-        timeout_type_arg: TimeoutType,
-        num_senders_arg: int,
         num_active_targets_arg: int,
         num_registered_targets_arg: int,
         num_unreg_timeouts_arg: int,
@@ -35303,10 +35313,6 @@ class TestSmartThreadComboScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the smart_send should
-                be coded with timeout and whether the smart_send should
-                succeed or fail with a timeout
-            num_senders_arg: number of threads to send msgs
             num_active_targets_arg: number of active threads to recv
             num_registered_targets_arg: number registered thread to
                 recv
@@ -35326,30 +35332,50 @@ class TestSmartThreadComboScenarios:
             + num_exit_timeouts_arg
             + num_full_q_timeouts_arg
         )
-        if timeout_type_arg == TimeoutType.TimeoutNone:
-            if total_arg_counts == 0:
-                return
-        else:
-            if (
+
+        # timeout_type_arg: specifies whether the SmartRequest should
+        #     be coded with timeout and whether the SmartRequest
+        #     should succeed or fail with a timeout
+        # num_senders_arg: number of threads to send msgs
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for timeout_type_arg in (
+            TimeoutType.TimeoutNone,
+            TimeoutType.TimeoutFalse,
+            TimeoutType.TimeoutTrue,
+        ):
+            if timeout_type_arg == TimeoutType.TimeoutNone:
+                if total_arg_counts == 0:
+                    continue
+            elif (
                 num_unreg_timeouts_arg + num_exit_timeouts_arg + num_full_q_timeouts_arg
             ) == 0:
-                return
+                continue
+            for num_senders_arg in (1, 2, 3):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "timeout_type": timeout_type_arg,
+                    "num_senders": num_senders_arg,
+                    "num_active_targets": num_active_targets_arg,
+                    "num_registered_targets": num_registered_targets_arg,
+                    "num_unreg_timeouts": num_unreg_timeouts_arg,
+                    "num_exit_timeouts": num_exit_timeouts_arg,
+                    "num_full_q_timeouts": num_full_q_timeouts_arg,
+                }
 
-        args_for_scenario_builder: dict[str, Any] = {
-            "timeout_type": timeout_type_arg,
-            "num_senders": num_senders_arg,
-            "num_active_targets": num_active_targets_arg,
-            "num_registered_targets": num_registered_targets_arg,
-            "num_unreg_timeouts": num_unreg_timeouts_arg,
-            "num_exit_timeouts": num_exit_timeouts_arg,
-            "num_full_q_timeouts": num_full_q_timeouts_arg,
-        }
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_send_msg_timeout_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_send_msg_timeout_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[total_arg_counts % num_commander_configs],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
