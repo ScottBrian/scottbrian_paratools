@@ -831,6 +831,21 @@ class RemainingPendingEvents(ErrorTstSmartThread):
     pass
 
 
+exception_list = [
+    IncorrectActionSpecified,
+    IncorrectDataDetected,
+    UnexpectedEvent,
+    UnrecognizedEvent,
+    UnrecognizedCmd,
+    InvalidInputDetected,
+    CmdTimedOut,
+    CmdFailed,
+    FailedLockVerify,
+    FailedDefDelVerify,
+    RemainingPendingEvents,
+]
+
+
 ########################################################################
 # get_names
 ########################################################################
@@ -5536,6 +5551,8 @@ class ConfigVerifier:
 
         self.expected_num_recv_timeouts: int = 0
 
+        self.abort_test_case = False
+
         self.stopped_event_items: dict[str, MonitorEventItem] = {}
         self.cmd_waiting_event_items: dict[str, threading.Event] = {}
 
@@ -5700,7 +5717,7 @@ class ConfigVerifier:
         """Gather log messages and call handlers."""
         self.log_test_msg("monitor entered")
 
-        timeout_value_seconds: float = 60.0
+        timeout_value_seconds: float = 120.0
         last_msg_processed_time: float = time.time()
         while not self.monitor_exit:
             self.monitor_event.wait(timeout=0.25)
@@ -5729,13 +5746,22 @@ class ConfigVerifier:
                         semi_msg = found_msg.replace(" ", ";", 3)
                         self.log_test_msg(f"monitor processing msg: {semi_msg}")
 
-                    found_log_item.run_process()
+                    try:
+                        found_log_item.run_process()
+                    except exception_list as exc:
+                        self.log_test_msg(f"monitor detected exception {exc}")
+                        self.abort_test_case = True
+                        self.abort_all_f1_threads()
+                        raise
+
                     last_msg_processed_time = time.time()
             # self.log_test_msg(f"monitor ({self.group_name}) completed message loop")
             if time.time() - last_msg_processed_time > timeout_value_seconds:
                 self.log_test_msg("monitor time out detected")
+                self.abort_test_case = True
                 self.abort_all_f1_threads()
                 self.monitor_bail = True
+
         self.log_test_msg(
             f"monitor exiting: {self.monitor_bail=}," f"{self.monitor_exit=}"
         )
@@ -18066,7 +18092,13 @@ class ConfigVerifier:
         while self.f1_process_cmds[f1_name]:
             cmd: ConfigCmd = self.msgs.get_msg(f1_name, timeout=None)
 
-            cmd.run_process(cmd_runner=f1_name)
+            try:
+                cmd.run_process(cmd_runner=f1_name)
+            except exception_list as exc:
+                self.log_test_msg(f"f1_driver detected exception {exc}")
+                self.abort_test_case = True
+                self.abort_all_f1_threads()
+                raise
 
             self.completed_cmds[f1_name].append(cmd.serial_num)
 
@@ -21135,7 +21167,7 @@ class ConfigVerifier:
             name="main_driver", seq="test_smart_thread.py::ConfigVerifier.main_driver"
         )
         self.log_test_msg(f"main_driver entry: {self.group_name=}")
-        while self.cmd_suite and not self.monitor_bail:
+        while self.cmd_suite and not self.monitor_bail and not self.abort_test_case:
             cmd: ConfigCmd = self.cmd_suite.popleft()
             self.log_test_msg(f"config_cmd: {self.group_name} {cmd}")
 
@@ -21149,11 +21181,29 @@ class ConfigVerifier:
                 self.msgs.queue_msg(target=name, msg=cmd)
 
             if self.commander_name in cmd.cmd_runners:
-                cmd.run_process(cmd_runner=self.commander_name)
+                try:
+                    cmd.run_process(cmd_runner=self.commander_name)
+                except exception_list as exc:
+                    self.log_test_msg(f"main_driver detected exception {exc}")
+                    self.abort_test_case = True
+                    self.abort_all_f1_threads()
+
                 self.completed_cmds[self.commander_name].append(cmd.serial_num)
 
-        self.monitor_bail = True
+        if not self.abort_test_case:
+            ############################################################
+            # check that pending events are complete
+            ############################################################
+            if not self.monitor_exit:
+                self.log_test_msg(
+                    f"Monitor Checkpoint: check_pending_events {self.group_name} 42"
+                )
+                self.monitor_event.set()
+                self.check_pending_events_complete_event.wait(timeout=30)
+
+        self.monitor_exit = True
         self.monitor_event.set()
+        self.monitor_thread.join()
 
         cmd_smart_thread = self.all_threads[self.commander_name]
         names_to_join: list[str] = []
@@ -21163,6 +21213,8 @@ class ConfigVerifier:
 
         if names_to_join:
             cmd_smart_thread.smart_join(targets=names_to_join, timeout=60)
+
+        assert not self.abort_test_case
 
         self.log_test_msg(f"main_driver exit: {self.group_name=}")
 
@@ -30213,9 +30265,11 @@ def scenario_driver(
             AppConfig.RemoteSmartThreadApp2,
         ]:
             config_ver.all_threads[config_ver.commander_name].thread.join()
+        else:
+            config_ver.all_threads[config_ver.commander_name].smart_unreg()
 
-    for config_ver in config_vers:
-        scenario_driver_part2(config_ver=config_ver)
+    # for config_ver in config_vers:
+    #     scenario_driver_part2(config_ver=config_ver)
 
     ################################################################
     # check log results
@@ -30593,53 +30647,53 @@ def scenario_driver_part1(
 ####################################################################
 # scenario_driver
 ####################################################################
-def scenario_driver_part2(
-    config_ver: ConfigVerifier,
-) -> None:
-    """Build and run a scenario.
+# def scenario_driver_part2(
+#     config_ver: ConfigVerifier,
+# ) -> None:
+#     """Build and run a scenario.
+#
+#     Args:
+#         config_ver: the ConfigVerifier
+#         caplog_to_use: the capsys to capture log messages
+#
+#     """
+#     config_ver.log_test_msg(
+#         "scenario_driver_part2 entry: "
+#         f"{config_ver.commander_name=} "
+#         f"{config_ver.group_name=}"
+#     )
+####################################################################
+# wait for scenario to complete
+####################################################################
+# config_ver.all_threads[config_ver.commander_name].thread.join()
 
-    Args:
-        config_ver: the ConfigVerifier
-        caplog_to_use: the capsys to capture log messages
+####################################################################
+# check that pending events are complete
+####################################################################
+# if not config_ver.monitor_exit:
+#     config_ver.log_test_msg(
+#         f"Monitor Checkpoint: check_pending_events {config_ver.group_name} 42"
+#     )
+#     config_ver.monitor_event.set()
+#     config_ver.check_pending_events_complete_event.wait(timeout=30)
+#
+# config_ver.monitor_exit = True
+# config_ver.monitor_event.set()
+# config_ver.monitor_thread.join()
 
-    """
-    config_ver.log_test_msg(
-        "scenario_driver_part2 entry: "
-        f"{config_ver.commander_name=} "
-        f"{config_ver.group_name=}"
-    )
-    ####################################################################
-    # wait for scenario to complete
-    ####################################################################
-    # config_ver.all_threads[config_ver.commander_name].thread.join()
+# ################################################################
+# # check log results
+# ################################################################
+# match_results = config_ver.log_ver.get_match_results(caplog=caplog_to_use)
+# config_ver.log_ver.print_match_results(match_results, print_matched=False)
+# config_ver.log_ver.verify_log_results(match_results)
 
-    ####################################################################
-    # check that pending events are complete
-    ####################################################################
-    if not config_ver.monitor_exit:
-        config_ver.log_test_msg(
-            f"Monitor Checkpoint: check_pending_events {config_ver.group_name} 42"
-        )
-        config_ver.monitor_event.set()
-        config_ver.check_pending_events_complete_event.wait(timeout=30)
+# log_len = len(caplog_to_use.record_tuples)
+#
+# logger.debug(f"mainline exiting {log_len=}")
 
-    config_ver.monitor_exit = True
-    config_ver.monitor_event.set()
-    config_ver.monitor_thread.join()
-
-    # ################################################################
-    # # check log results
-    # ################################################################
-    # match_results = config_ver.log_ver.get_match_results(caplog=caplog_to_use)
-    # config_ver.log_ver.print_match_results(match_results, print_matched=False)
-    # config_ver.log_ver.verify_log_results(match_results)
-
-    # log_len = len(caplog_to_use.record_tuples)
-    #
-    # logger.debug(f"mainline exiting {log_len=}")
-
-    # print(f"scenario builder: {scenario_builder}")
-    # print(f"scenario args: {scenario_builder_args}")
+# print(f"scenario builder: {scenario_builder}")
+# print(f"scenario args: {scenario_builder_args}")
 
 
 ########################################################################
