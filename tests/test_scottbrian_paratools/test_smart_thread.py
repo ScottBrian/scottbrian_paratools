@@ -104,6 +104,102 @@ CheckZeroCtArg: TypeAlias = tuple[str, str]
 PotentialDefDelKey: TypeAlias = tuple[st.PairKey, str]
 
 
+########################################################################
+# SmartThread test exceptions
+########################################################################
+class ErrorTstSmartThread(Exception):
+    """Base class for exception in this module."""
+
+    pass
+
+
+class IncorrectActionSpecified(ErrorTstSmartThread):
+    """IncorrectActionSpecified exception class."""
+
+    pass
+
+
+class IncorrectDataDetected(ErrorTstSmartThread):
+    """IncorrectDataDetected exception class."""
+
+    pass
+
+
+class UnexpectedEvent(ErrorTstSmartThread):
+    """Unexpected action encountered exception class."""
+
+    pass
+
+
+class UnrecognizedEvent(ErrorTstSmartThread):
+    """Unrecognized event ws detected."""
+
+    pass
+
+
+class UnrecognizedCmd(ErrorTstSmartThread):
+    """UnrecognizedCmd exception class."""
+
+    pass
+
+
+class InvalidConfigurationDetected(ErrorTstSmartThread):
+    """UnrecognizedCmd exception class."""
+
+    pass
+
+
+class InvalidInputDetected(ErrorTstSmartThread):
+    """The input is not correct."""
+
+    pass
+
+
+class CmdTimedOut(ErrorTstSmartThread):
+    """The cmd took to long."""
+
+    pass
+
+
+class CmdFailed(ErrorTstSmartThread):
+    """The cmd failed."""
+
+    pass
+
+
+class FailedLockVerify(ErrorTstSmartThread):
+    """An expected lock position was not found."""
+
+    pass
+
+
+class FailedDefDelVerify(ErrorTstSmartThread):
+    """An expected condition was incorrect."""
+
+    pass
+
+
+class RemainingPendingEvents(ErrorTstSmartThread):
+    """There are remaining pending events."""
+
+    pass
+
+
+exception_list = [
+    IncorrectActionSpecified,
+    IncorrectDataDetected,
+    UnexpectedEvent,
+    UnrecognizedEvent,
+    UnrecognizedCmd,
+    InvalidInputDetected,
+    CmdTimedOut,
+    CmdFailed,
+    FailedLockVerify,
+    FailedDefDelVerify,
+    RemainingPendingEvents,
+]
+
+
 class DefDelReasons(NamedTuple):
     """DefDelReasons used to test pending flags."""
 
@@ -751,102 +847,6 @@ class TimeoutType(Enum):
 
 
 ########################################################################
-# SmartThread test exceptions
-########################################################################
-class ErrorTstSmartThread(Exception):
-    """Base class for exception in this module."""
-
-    pass
-
-
-class IncorrectActionSpecified(ErrorTstSmartThread):
-    """IncorrectActionSpecified exception class."""
-
-    pass
-
-
-class IncorrectDataDetected(ErrorTstSmartThread):
-    """IncorrectDataDetected exception class."""
-
-    pass
-
-
-class UnexpectedEvent(ErrorTstSmartThread):
-    """Unexpected action encountered exception class."""
-
-    pass
-
-
-class UnrecognizedEvent(ErrorTstSmartThread):
-    """Unrecognized event ws detected."""
-
-    pass
-
-
-class UnrecognizedCmd(ErrorTstSmartThread):
-    """UnrecognizedCmd exception class."""
-
-    pass
-
-
-class InvalidConfigurationDetected(ErrorTstSmartThread):
-    """UnrecognizedCmd exception class."""
-
-    pass
-
-
-class InvalidInputDetected(ErrorTstSmartThread):
-    """The input is not correct."""
-
-    pass
-
-
-class CmdTimedOut(ErrorTstSmartThread):
-    """The cmd took to long."""
-
-    pass
-
-
-class CmdFailed(ErrorTstSmartThread):
-    """The cmd failed."""
-
-    pass
-
-
-class FailedLockVerify(ErrorTstSmartThread):
-    """An expected lock position was not found."""
-
-    pass
-
-
-class FailedDefDelVerify(ErrorTstSmartThread):
-    """An expected condition was incorrect."""
-
-    pass
-
-
-class RemainingPendingEvents(ErrorTstSmartThread):
-    """There are remaining pending events."""
-
-    pass
-
-
-exception_list = [
-    IncorrectActionSpecified,
-    IncorrectDataDetected,
-    UnexpectedEvent,
-    UnrecognizedEvent,
-    UnrecognizedCmd,
-    InvalidInputDetected,
-    CmdTimedOut,
-    CmdFailed,
-    FailedLockVerify,
-    FailedDefDelVerify,
-    RemainingPendingEvents,
-]
-
-
-########################################################################
 # get_names
 ########################################################################
 def get_names(stem: str, count: int) -> set[str]:
@@ -1000,7 +1000,6 @@ class ConfirmResponse(ConfigCmd):
             time.sleep(0.2)
             timeout_value = 60
             if time.time() - start_time > timeout_value:
-                self.config_ver.abort_all_f1_threads()
                 raise CmdTimedOut(
                     "ConfirmResponse serial_num "
                     f"{self.serial_num} took longer than "
@@ -2387,6 +2386,7 @@ class Unregister(ConfigCmd):
         unregister_targets: Iterable[str],
         not_registered_remotes: Optional[Iterable[str]] = None,
         log_msg: Optional[str] = None,
+        post_main_driver: bool = False,
     ) -> None:
         """Initialize the instance.
 
@@ -2396,6 +2396,8 @@ class Unregister(ConfigCmd):
             not_registered_remotes: remotes not registered that should
                 result in error
             log_msg: log message for smart_unreg
+            post_main_driver: requested by main driver when unreg is
+                done for all remaining f1 threads and commander thread
         """
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -2405,6 +2407,8 @@ class Unregister(ConfigCmd):
         self.not_registered_remotes = get_set(not_registered_remotes)
 
         self.log_msg = log_msg
+
+        self.post_main_driver = post_main_driver
 
         self.arg_list += ["unregister_targets", "not_registered_remotes"]
 
@@ -2419,6 +2423,7 @@ class Unregister(ConfigCmd):
             unregister_targets=self.unregister_targets,
             not_registered_remotes=self.not_registered_remotes,
             log_msg=self.log_msg,
+            post_main_driver=self.post_main_driver,
         )
 
 
@@ -5499,7 +5504,8 @@ class ConfigVerifier:
 
         self.monitor_thread = threading.Thread(target=self.monitor)
         self.monitor_exit = False
-        self.monitor_bail = False
+
+        self.main_driver_unreg: threading.Event = threading.Event()
 
         self.cmd_suite: deque[ConfigCmd] = deque()
         self.cmd_serial_num: int = 0
@@ -5719,7 +5725,7 @@ class ConfigVerifier:
 
         timeout_value_seconds: float = 120.0
         last_msg_processed_time: float = time.time()
-        while not self.monitor_exit:
+        while True:
             self.monitor_event.wait(timeout=0.25)
             self.monitor_event.clear()
 
@@ -5727,9 +5733,6 @@ class ConfigVerifier:
                 with self.monitor_condition:
                     self.monitor_condition.notify_all()
                 continue
-
-            if self.monitor_bail:
-                break
 
             # self.log_test_msg(f"monitor ({self.group_name}) about to look for messages")
             while self.get_log_msgs():
@@ -5748,7 +5751,7 @@ class ConfigVerifier:
 
                     try:
                         found_log_item.run_process()
-                    except exception_list as exc:
+                    except Exception as exc:
                         self.log_test_msg(f"monitor detected exception {exc}")
                         self.abort_test_case = True
                         self.abort_all_f1_threads()
@@ -5757,14 +5760,16 @@ class ConfigVerifier:
                     last_msg_processed_time = time.time()
             # self.log_test_msg(f"monitor ({self.group_name}) completed message loop")
             if time.time() - last_msg_processed_time > timeout_value_seconds:
-                self.log_test_msg("monitor time out detected")
                 self.abort_test_case = True
                 self.abort_all_f1_threads()
-                self.monitor_bail = True
+                error_msg = "monitor timed out"
+                self.log_test_msg(error_msg)
+                raise CmdTimedOut(error_msg)
 
-        self.log_test_msg(
-            f"monitor exiting: {self.monitor_bail=}," f"{self.monitor_exit=}"
-        )
+            if self.monitor_exit:
+                break
+
+        self.log_test_msg(f"monitor exiting: {self.monitor_exit=}")
 
     ####################################################################
     # set_request_pending_flag
@@ -5970,8 +5975,7 @@ class ConfigVerifier:
                 exit_cmd = ExitThread(cmd_runners=name, stopped_by=self.commander_name)
                 self.add_cmd_info(exit_cmd)
                 self.msgs.queue_msg(name, exit_cmd)
-        self.monitor_bail = True
-        self.monitor_exit = True
+
         self.monitor_event.set()
 
         if threading.current_thread() is not self.monitor_thread:
@@ -6941,7 +6945,6 @@ class ConfigVerifier:
                 if f1_create_item.app_config == AppConfig.ScriptStyle:
                     self.thread_target_names |= {f1_create_item.name}
             if not set(f1_names).issubset(self.unregistered_names):
-                self.abort_all_f1_threads()
                 raise InvalidInputDetected(
                     f"Input names {f1_names} not a "
                     f"subset of unregistered names "
@@ -7018,7 +7021,6 @@ class ConfigVerifier:
         """
         names = get_set(names)
         if not names.issubset(self.active_names):
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input names {names} not a subset "
                 f"of active names {self.active_names}"
@@ -7092,7 +7094,6 @@ class ConfigVerifier:
         """
         assert num_to_exit > 0
         if (len(self.active_names) - 1) < num_to_exit:
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input num_to_exit {num_to_exit} "
                 f"is greater than the number of "
@@ -7124,7 +7125,6 @@ class ConfigVerifier:
         """
         assert num_to_create > 0
         if len(self.unregistered_names) < num_to_create:
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input num_to_create {num_to_create} "
                 f"is greater than the number of "
@@ -7177,7 +7177,6 @@ class ConfigVerifier:
         join_target_names = get_set(join_target_names)
 
         if not join_target_names.issubset(self.stopped_remotes):
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input {join_target_names} is not a "
                 "subset of inactive names "
@@ -7228,7 +7227,6 @@ class ConfigVerifier:
         """
         assert num_to_join > 0
         if len(self.stopped_remotes) < num_to_join:
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input num_to_join {num_to_join} "
                 f"is greater than the number of "
@@ -10053,7 +10051,6 @@ class ConfigVerifier:
                             incomplete_items[cmd_runner] = {}
                         incomplete_items[cmd_runner][event_name] = item
                 else:
-                    self.abort_all_f1_threads()
                     raise UnrecognizedEvent(
                         "check_pending_events does not recognize"
                         f"event {event_name=}, {item=}"
@@ -10062,7 +10059,6 @@ class ConfigVerifier:
         if incomplete_items:
             for cmd_runner, item in incomplete_items.items():
                 self.log_test_msg(f"incomplete_item: {cmd_runner=}, {item=}")
-            self.abort_all_f1_threads()
             raise RemainingPendingEvents(
                 "check_pending_events detected that there are remaining "
                 f"pending items:\n {incomplete_items=}"
@@ -17487,7 +17483,6 @@ class ConfigVerifier:
         """
         start_names = get_set(start_names)
         if not start_names.issubset(self.registered_names):
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input {start_names} is not a subset "
                 "of registered names "
@@ -17530,7 +17525,6 @@ class ConfigVerifier:
         """
         assert num_to_start > 0
         if len(self.registered_names) < num_to_start:
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input num_to_start {num_to_start} "
                 f"is greater than the number of "
@@ -17723,7 +17717,6 @@ class ConfigVerifier:
         """
         names = get_set(names)
         if not names.issubset(self.registered_names):
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input {names} is not a subset "
                 "of registered names "
@@ -17773,7 +17766,6 @@ class ConfigVerifier:
         """
         assert num_to_unreg > 0
         if len(self.registered_names) < num_to_unreg:
-            self.abort_all_f1_threads()
             raise InvalidInputDetected(
                 f"Input num_to_unreg {num_to_unreg} "
                 f"is greater than the number of "
@@ -18094,7 +18086,7 @@ class ConfigVerifier:
 
             try:
                 cmd.run_process(cmd_runner=f1_name)
-            except exception_list as exc:
+            except Exception as exc:
                 self.log_test_msg(f"f1_driver detected exception {exc}")
                 self.abort_test_case = True
                 self.abort_all_f1_threads()
@@ -18887,7 +18879,7 @@ class ConfigVerifier:
             state_key = (
                 cmd_runner,
                 target,
-                st.ThreadState.Registered,
+                self.expected_registered[target].st_state,
                 st.ThreadState.Unregistered,
             )
             pe[PE.set_state_msg][state_key] += 1
@@ -19784,8 +19776,6 @@ class ConfigVerifier:
         # call handler for request
         ################################################################
         actions: dict[tuple[st.ThreadState, st.ThreadState], Callable[..., None]] = {
-            # (st.ThreadState.Unregistered, st.ThreadState.Initialized):
-            #     self.handle_set_state_unreg_to_init,
             (
                 st.ThreadState.Initialized,
                 st.ThreadState.Registered,
@@ -19798,6 +19788,10 @@ class ConfigVerifier:
                 st.ThreadState.Alive,
                 st.ThreadState.Stopped,
             ): self.handle_set_state_alive_to_stop,
+            (
+                st.ThreadState.Alive,
+                st.ThreadState.Unregistered,
+            ): self.handle_set_state_reg_to_unreg,
             (
                 st.ThreadState.Registered,
                 st.ThreadState.Unregistered,
@@ -20122,7 +20116,6 @@ class ConfigVerifier:
                 f"encountered unexpected log msg: {log_msg}"
             )
             self.log_test_msg(error_msg)
-            self.abort_all_f1_threads()
             raise UnexpectedEvent(error_msg)
 
         pe[PE.subprocess_msg][sub_key] -= 1
@@ -20414,7 +20407,6 @@ class ConfigVerifier:
                 f"wait_for_monitor timed out for {cmd_runner=} ({self.group_name}) "
                 f"and {rtn_name=} {start_time=}"
             )
-            self.abort_all_f1_threads()
             raise CmdTimedOut(error_msg)
 
     ####################################################################
@@ -20686,6 +20678,7 @@ class ConfigVerifier:
         unregister_targets: set[str],
         not_registered_remotes: set[str],
         log_msg: Optional[str] = None,
+        post_main_driver: bool = False,
     ) -> None:
         """Unregister the named threads.
 
@@ -20695,7 +20688,8 @@ class ConfigVerifier:
             not_registered_remotes: thread names that are not is
                 registered state
             log_msg: log msg for the smart_unreg request
-
+            post_main_driver: set by main driver when unreg of commander
+                remaining threads is done
         """
         self.log_test_msg(
             f"handle_unregister entry for {cmd_runner=}, " f"{unregister_targets=}"
@@ -20757,21 +20751,11 @@ class ConfigVerifier:
             )
 
         self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="handle_unregister")
-        # self.monitor_event.set()
-
-        # with self.ops_lock:
-        #     self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-        #
-        # self.log_test_msg(
-        #     f"{cmd_runner=} ({self.group_name}) handle_unregister "
-        #     f"waiting for monitor"
-        # )
-        #
-        # self.cmd_waiting_event_items[cmd_runner].wait()
-        # with self.ops_lock:
-        #     del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f"handle_unregister exiting: {cmd_runner=}")
+
+        if post_main_driver:
+            self.main_driver_unreg.set()
 
     ####################################################################
     # handle_wait
@@ -21103,7 +21087,6 @@ class ConfigVerifier:
 
             if not lock_verified:
                 if (time.time() - start_time) > timeout_value:
-                    self.abort_all_f1_threads()
                     owner_wait_q = st.SmartThread._registry[
                         self.group_name
                     ].registry_lock.owner_wait_q
@@ -21167,7 +21150,7 @@ class ConfigVerifier:
             name="main_driver", seq="test_smart_thread.py::ConfigVerifier.main_driver"
         )
         self.log_test_msg(f"main_driver entry: {self.group_name=}")
-        while self.cmd_suite and not self.monitor_bail and not self.abort_test_case:
+        while self.cmd_suite and not self.abort_test_case:
             cmd: ConfigCmd = self.cmd_suite.popleft()
             self.log_test_msg(f"config_cmd: {self.group_name} {cmd}")
 
@@ -21183,7 +21166,7 @@ class ConfigVerifier:
             if self.commander_name in cmd.cmd_runners:
                 try:
                     cmd.run_process(cmd_runner=self.commander_name)
-                except exception_list as exc:
+                except Exception as exc:
                     self.log_test_msg(f"main_driver detected exception {exc}")
                     self.abort_test_case = True
                     self.abort_all_f1_threads()
@@ -21194,12 +21177,11 @@ class ConfigVerifier:
             ############################################################
             # check that pending events are complete
             ############################################################
-            if not self.monitor_exit:
-                self.log_test_msg(
-                    f"Monitor Checkpoint: check_pending_events {self.group_name} 42"
-                )
-                self.monitor_event.set()
-                self.check_pending_events_complete_event.wait(timeout=30)
+            self.log_test_msg(
+                f"Monitor Checkpoint: check_pending_events {self.group_name} 42"
+            )
+            self.monitor_event.set()
+            self.check_pending_events_complete_event.wait(timeout=30)
 
         names_to_join = st.SmartThread.get_smart_thread_names(
             group_name=self.group_name,
@@ -21222,14 +21204,16 @@ class ConfigVerifier:
 
         if names_to_unreg:
             unreg_cmd = Unregister(
-                cmd_runners=self.commander_name, unregister_targets=names_to_unreg
+                cmd_runners=self.commander_name,
+                unregister_targets=names_to_unreg,
+                post_main_driver=True,
             )
             self.add_cmd_info(unreg_cmd)
             unreg_cmd.run_process(cmd_runner=self.commander_name)
 
         self.monitor_event.set()
 
-        time.sleep(10)
+        self.main_driver_unreg.wait()
 
         self.monitor_exit = True
         self.monitor_event.set()
@@ -21411,13 +21395,11 @@ class ConfigVerifier:
                     f"add_to_pair_array {pair_key=} in " f"{self.expected_pairs=}"
                 )
                 if not self.expected_pairs[pair_key]:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         "Attempt to add thread to existing pair array "
                         "that has an empty ThreadPairStatus dict"
                     )
                 if add_name in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"{cmd_runner} attempted to add {add_name} to "
                         f"pair array for {pair_key=} that already "
@@ -21425,7 +21407,6 @@ class ConfigVerifier:
                     )
 
                 if other_name not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         "Attempt to add thread to pair array that did "
                         "not have the other name in the pair array"
@@ -21608,7 +21589,7 @@ class ConfigVerifier:
 
                     pe[PE.set_state_msg][state_key] += 1
                     self.log_test_msg(
-                        f"clean_registry bumped set_state " f"pending for {state_key=} "
+                        f"clean_registry bumped set_state pending for {state_key=} "
                     )
                 else:
                     state_to_use = item.st_state
@@ -21620,6 +21601,15 @@ class ConfigVerifier:
                     self.pending_events[key][PE.status_msg][
                         (item.is_alive, state_to_use)
                     ] += 1
+
+                if (
+                    item.is_alive
+                    and item.st_state == st.ThreadState.Alive
+                    and item.reg_to_unreg
+                ):
+                    rem_key: RemRegKey = (key, request)
+                    pe[PE.rem_reg_msg][rem_key] += 1
+                    rem_targets.append(key)
 
                 if not item.is_alive and (
                     (item.reg_to_unreg and item.st_state == st.ThreadState.Registered)
@@ -21757,14 +21747,12 @@ class ConfigVerifier:
         """
         for name, real_reg_item in real_reg_items.items():
             if name not in self.expected_registered:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found SmartThread real registry has entry "
                     f"for {name=} that is missing from the expected_registry. "
                     f"{self.expected_registered.keys()=}"
                 )
             if self.expected_registered[name].is_alive != real_reg_item.is_alive:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found SmartThread real registry has "
                     f"entry for {name=} {self.group_name} that has is_alive of "
@@ -21773,7 +21761,6 @@ class ConfigVerifier:
                     f"{self.expected_registered[name].is_alive}"
                 )
             if self.expected_registered[name].st_state != real_reg_item.state:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found SmartThread real registry has "
                     f"entry for {name=} that has status of "
@@ -21785,7 +21772,6 @@ class ConfigVerifier:
         # verify expected_registered matches real registry
         for name, tracker in self.expected_registered.items():
             if name not in real_reg_items:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found expected_registered has an entry "
                     f"for {name=} that is missing from real "
@@ -21795,13 +21781,11 @@ class ConfigVerifier:
         # verify pair_array matches expected_pairs
         for pair_key, status_blocks in real_pair_array_items.items():
             if len(status_blocks) == 0:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found pair_key {pair_key} in real "
                     f"SmartThread pair_array that has an empty status_blocks"
                 )
             if pair_key not in self.expected_pairs:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found pair_key {pair_key} in real "
                     f"SmartThread pair_array that is not found in "
@@ -21809,7 +21793,6 @@ class ConfigVerifier:
                 )
             for name, status_item in status_blocks.items():
                 if name not in real_reg_items:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found SmartThread real pair_array "
                         f"has a status_blocks entry for {name=} that is "
@@ -21817,7 +21800,6 @@ class ConfigVerifier:
                     )
 
                 if name not in self.expected_registered:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
                         f"SmartThread pair_array status_blocks for pair_key"
@@ -21826,7 +21808,6 @@ class ConfigVerifier:
                     )
 
                 if name not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
                         f"SmartThread pair_array status_blocks for pair_key"
@@ -21841,7 +21822,6 @@ class ConfigVerifier:
                         or status_item.pending_wait
                         or status_item.pending_sync
                     ):
-                        self.abort_all_f1_threads()
                         raise InvalidConfigurationDetected(
                             f"verify_config found {name=} in real "
                             f"SmartThread pair_array status_blocks for "
@@ -21851,7 +21831,6 @@ class ConfigVerifier:
                         )
                 mock_status_item = self.expected_pairs[pair_key][name]
                 if status_item.pending_request != mock_status_item.pending_request:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
                         f"SmartThread pair_array status_blocks for "
@@ -21860,7 +21839,6 @@ class ConfigVerifier:
                         f"match {mock_status_item.pending_request=}"
                     )
                 if status_item.pending_msg_count != mock_status_item.pending_msg_count:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
                         f"SmartThread pair_array status_blocks for "
@@ -21869,7 +21847,6 @@ class ConfigVerifier:
                         f"match {mock_status_item.pending_msg_count=}"
                     )
                 if status_item.pending_wait != mock_status_item.pending_wait:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
                         f"SmartThread pair_array status_blocks for "
@@ -21878,7 +21855,6 @@ class ConfigVerifier:
                         f"match {mock_status_item.pending_wait=}"
                     )
                 if status_item.pending_sync != mock_status_item.pending_sync:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
                         f"SmartThread pair_array status_blocks for "
@@ -21890,14 +21866,12 @@ class ConfigVerifier:
         # verify expected_pairs matches pair_array
         for pair_key, mock_status_blocks in self.expected_pairs.items():
             if pair_key not in real_pair_array_items:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found {pair_key=} in expected_pairs but "
                     f"not in real SmartThread pair_array"
                 )
             for name, mock_status_item in mock_status_blocks.items():
                 if name not in real_reg_items:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found SmartThread mock pair_array "
                         f"has a status_blocks entry for {name=} that is "
@@ -21905,7 +21879,6 @@ class ConfigVerifier:
                     )
 
                 if name not in self.expected_registered:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in mock "
                         f"pair_array status_blocks for pair_key"
@@ -21914,7 +21887,6 @@ class ConfigVerifier:
                     )
 
                 if name not in real_pair_array_items[pair_key]:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in mock "
                         f"expected_pairs for pair_key {pair_key}, but not in "
@@ -21944,14 +21916,12 @@ class ConfigVerifier:
         """
         for name in verify_data.names_to_check:
             if not real_reg_items[name].is_alive:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_alive found {name} has "
                     f"{real_reg_items[name].is_alive=} "
                     "which is not equal to the expected is_alive of True "
                 )
             if not self.expected_registered[name].is_alive:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_alive found {name=} has mock "
                     f"{self.expected_registered[name].is_alive=} which is "
@@ -21981,14 +21951,12 @@ class ConfigVerifier:
         """
         for name in verify_data.names_to_check:
             if real_reg_items[name].is_alive:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_not_alive found {name=} has real "
                     f"{real_reg_items[name].is_alive=} "
                     "which is not equal to the expected is_alive of False "
                 )
             if self.expected_registered[name].is_alive:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_not_alive found {name=} has mock "
                     f"{self.expected_registered[name].is_alive=} which is "
@@ -22021,7 +21989,6 @@ class ConfigVerifier:
                 real_reg_items[name].state != verify_data.state_to_check
                 or self.expected_registered[name].st_state != verify_data.state_to_check
             ):
-                self.abort_all_f1_threads()
                 self.log_test_msg(
                     f"verify_state for {name=}: {verify_data.state_to_check=} "
                     f"does not match either/both {real_reg_items[name].state} "
@@ -22058,14 +22025,12 @@ class ConfigVerifier:
         """
         for name in verify_data.names_to_check:
             if name not in real_reg_items:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_in_registry found {name=} is not registered in "
                     f"the real SmartThread._registry per "
                     f"{verify_data.cmd_runner=}"
                 )
             if name not in self.expected_registered:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_in_registry found {name=} is not registered in "
                     f"the mock SmartThread._registry per "
@@ -22095,14 +22060,12 @@ class ConfigVerifier:
         """
         for name in verify_data.names_to_check:
             if name in real_reg_items:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_not_in_registry found {name=} is registered in "
                     f"the real SmartThread._registry per "
                     f"{verify_data.cmd_runner=}"
                 )
             if name in self.expected_registered:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_in_registry_not found {name=} is registered in "
                     f"the mock expected_registered per "
@@ -22241,7 +22204,6 @@ class ConfigVerifier:
                 st.ThreadState.Alive,
                 st.ThreadState.Stopped,
             ):
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_state found {name=} has real state "
                     f"{real_reg_items[name].state} not equal to the expected "
@@ -22252,7 +22214,6 @@ class ConfigVerifier:
                 st.ThreadState.Alive,
                 st.ThreadState.Stopped,
             ):
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_state found {name=} has mock state "
                     f"{self.expected_registered[name].st_state} not equal to "
@@ -22308,27 +22269,23 @@ class ConfigVerifier:
         pair_keys = self.get_pair_keys(verify_data.names_to_check)
         for pair_key in pair_keys:
             if pair_key not in real_pair_array_items:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_paired found {pair_key=} is not " f"in the real pair_array"
                 )
 
             if pair_key not in self.expected_pairs:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_paired found {pair_key=} is not " f"in the mock pair_array"
                 )
 
             for name in pair_key:
                 if name not in real_pair_array_items[pair_key]:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_paired found {name=} for {pair_key=} does "
                         f"not have a status block in the real pair_array"
                     )
 
                 if name not in self.expected_pairs[pair_key]:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_paired found {name=} for {pair_key=} does "
                         f"not have a status block in the mock pair_array"
@@ -22358,14 +22315,12 @@ class ConfigVerifier:
         pair_keys = combinations(sorted(verify_data.names_to_check), 2)
         for pair_key in pair_keys:
             if pair_key in real_pair_array_items:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_not_paired found {pair_key=} is in "
                     f"in the real pair_array"
                 )
 
             if pair_key in self.expected_pairs:
-                self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_not_paired found {pair_key=} is in "
                     f"in the mock pair_array"
@@ -22398,7 +22353,6 @@ class ConfigVerifier:
                     removed_name, exp_remaining_name
                 )
                 if pair_key not in real_pair_array_items:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_half_paired found {pair_key=} is not "
                         f"in the real pair_array"
@@ -22406,14 +22360,12 @@ class ConfigVerifier:
 
                 num_real_status_blocks = len(real_pair_array_items[pair_key])
                 if num_real_status_blocks != 1:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_half_paired found {num_real_status_blocks=} "
                         f"is not equal to 1 in the real pair_array"
                     )
 
                 if exp_remaining_name not in real_pair_array_items[pair_key]:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_half_paired found {exp_remaining_name=} does "
                         f"not have a status block in the real pair_array for "
@@ -22421,20 +22373,17 @@ class ConfigVerifier:
                     )
 
                 if pair_key not in self.expected_pairs:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_half_paired found {pair_key=} is not "
                         f"in the mock pair_array"
                     )
                 num_mock_status_blocks = len(self.expected_pairs[pair_key])
                 if num_mock_status_blocks != 1:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_half_paired found {num_mock_status_blocks=} "
                         f"is not 1 in the mock pair_array"
                     )
                 if exp_remaining_name not in self.expected_pairs[pair_key]:
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_half_paired found {exp_remaining_name=} does "
                         f"not have a status block in the mock pair_array for "
@@ -22471,7 +22420,6 @@ class ConfigVerifier:
                         f"in the real pair_array needed to check "
                         f"{check_name=}, {remote_name=}"
                     )
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_pending_flags found {pair_key=} is not "
                         f"in the real pair_array needed to check "
@@ -22484,7 +22432,6 @@ class ConfigVerifier:
                         f"not have a status block in the real pair_array for "
                         f"{pair_key=}."
                     )
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_pending_flags found {check_name=} does "
                         f"not have a status block in the real pair_array for "
@@ -22497,7 +22444,6 @@ class ConfigVerifier:
                         f"in the mock pair_array needed to check "
                         f"{check_name=}, {remote_name=}"
                     )
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_pending_flags found {pair_key=} is not "
                         f"in the mock pair_array needed to check "
@@ -22510,7 +22456,6 @@ class ConfigVerifier:
                         f"not have a status block in the mock pair_array for "
                         f"{pair_key=}."
                     )
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_pending_flags 4 found {check_name=} does "
                         f"not have a status block in the mock pair_array for "
@@ -22542,7 +22487,6 @@ class ConfigVerifier:
                         f"{mock_pending_flags=}, "
                         f"{verify_data.exp_pending_flags=}."
                     )
-                    self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_pending_flags found {pair_key=}, "
                         f"{check_name=} does not have matching pending flags: "
@@ -22601,7 +22545,6 @@ class ConfigVerifier:
             == registered_found_real
             == registered_found_mock
         ):
-            self.abort_all_f1_threads()
             raise InvalidConfigurationDetected(
                 f"verify_counts found expected "
                 f"{verify_counts_data.num_registered=} is not equal to "
@@ -22611,7 +22554,6 @@ class ConfigVerifier:
         if not (
             verify_counts_data.num_active == active_found_real == active_found_mock
         ):
-            self.abort_all_f1_threads()
             raise InvalidConfigurationDetected(
                 f"verify_counts found expected "
                 f"{verify_counts_data.num_active=} is not equal to "
@@ -22621,7 +22563,6 @@ class ConfigVerifier:
         if not (
             verify_counts_data.num_stopped == stopped_found_real == stopped_found_mock
         ):
-            self.abort_all_f1_threads()
             raise InvalidConfigurationDetected(
                 f"verify_counts found expected "
                 f"{verify_counts_data.num_stopped=} is not equal to "
@@ -30665,58 +30606,6 @@ def scenario_driver_part1(
     )
 
 
-####################################################################
-# scenario_driver
-####################################################################
-# def scenario_driver_part2(
-#     config_ver: ConfigVerifier,
-# ) -> None:
-#     """Build and run a scenario.
-#
-#     Args:
-#         config_ver: the ConfigVerifier
-#         caplog_to_use: the capsys to capture log messages
-#
-#     """
-#     config_ver.log_test_msg(
-#         "scenario_driver_part2 entry: "
-#         f"{config_ver.commander_name=} "
-#         f"{config_ver.group_name=}"
-#     )
-####################################################################
-# wait for scenario to complete
-####################################################################
-# config_ver.all_threads[config_ver.commander_name].thread.join()
-
-####################################################################
-# check that pending events are complete
-####################################################################
-# if not config_ver.monitor_exit:
-#     config_ver.log_test_msg(
-#         f"Monitor Checkpoint: check_pending_events {config_ver.group_name} 42"
-#     )
-#     config_ver.monitor_event.set()
-#     config_ver.check_pending_events_complete_event.wait(timeout=30)
-#
-# config_ver.monitor_exit = True
-# config_ver.monitor_event.set()
-# config_ver.monitor_thread.join()
-
-# ################################################################
-# # check log results
-# ################################################################
-# match_results = config_ver.log_ver.get_match_results(caplog=caplog_to_use)
-# config_ver.log_ver.print_match_results(match_results, print_matched=False)
-# config_ver.log_ver.verify_log_results(match_results)
-
-# log_len = len(caplog_to_use.record_tuples)
-#
-# logger.debug(f"mainline exiting {log_len=}")
-
-# print(f"scenario builder: {scenario_builder}")
-# print(f"scenario args: {scenario_builder_args}")
-
-
 ########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
@@ -35391,16 +35280,11 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_send_msg_timeout_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_active_targets_arg", [2])
-    @pytest.mark.parametrize("num_registered_targets_arg", [2])
-    @pytest.mark.parametrize("num_unreg_timeouts_arg", [2])
-    @pytest.mark.parametrize("num_exit_timeouts_arg", [2])
-    @pytest.mark.parametrize("num_full_q_timeouts_arg", [1])
+    @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
     def test_send_msg_timeout_scenarios(
         self,
         num_active_targets_arg: int,
