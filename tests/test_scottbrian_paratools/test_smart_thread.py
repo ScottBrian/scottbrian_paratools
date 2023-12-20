@@ -21201,18 +21201,39 @@ class ConfigVerifier:
                 self.monitor_event.set()
                 self.check_pending_events_complete_event.wait(timeout=30)
 
+        names_to_join = st.SmartThread.get_smart_thread_names(
+            group_name=self.group_name,
+            states=(st.ThreadState.Alive, st.ThreadState.Stopped),
+        )
+
+        names_to_join -= {self.commander_name}
+        if names_to_join:
+            join_cmd = JoinTimeoutFalse(
+                cmd_runners=self.commander_name, join_names=names_to_join, timeout=120
+            )
+            self.add_cmd_info(join_cmd)
+            join_cmd.run_process(cmd_runner=self.commander_name)
+
+        names_to_unreg = st.SmartThread.get_smart_thread_names(
+            group_name=self.group_name
+        )
+
+        self.monitor_event.set()
+
+        if names_to_unreg:
+            unreg_cmd = Unregister(
+                cmd_runners=self.commander_name, unregister_targets=names_to_unreg
+            )
+            self.add_cmd_info(unreg_cmd)
+            unreg_cmd.run_process(cmd_runner=self.commander_name)
+
+        self.monitor_event.set()
+
+        time.sleep(10)
+
         self.monitor_exit = True
         self.monitor_event.set()
         self.monitor_thread.join()
-
-        cmd_smart_thread = self.all_threads[self.commander_name]
-        names_to_join: list[str] = []
-        for name in self.all_threads.keys():
-            if name != cmd_smart_thread.name:
-                names_to_join.append(name)
-
-        if names_to_join:
-            cmd_smart_thread.smart_join(targets=names_to_join, timeout=60)
 
         assert not self.abort_test_case
 
@@ -30265,8 +30286,8 @@ def scenario_driver(
             AppConfig.RemoteSmartThreadApp2,
         ]:
             config_ver.all_threads[config_ver.commander_name].thread.join()
-        else:
-            config_ver.all_threads[config_ver.commander_name].smart_unreg()
+        # else:
+        #     config_ver.all_threads[config_ver.commander_name].smart_unreg()
 
     # for config_ver in config_vers:
     #     scenario_driver_part2(config_ver=config_ver)
