@@ -25361,6 +25361,9 @@ class TestSmartThreadInterface:
             beta_smart_thread.get_state(group_name="test1", name="beta")
             == ThreadState.Unregistered
         )
+
+        alpha_smart_thread.smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -26302,6 +26305,9 @@ class TestSmartThreadInterface:
                 SmartThread.get_state(group_name=group_name, name="beta")
                 == ThreadState.Unregistered
             )
+
+            alpha_smart_thread[idx].smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -26904,10 +26910,13 @@ class TestSmartThreadInterface:
             beta_smart_thread.get_state(group_name="test1", name="beta")
             == ThreadState.Unregistered
         )
+
+        alpha_smart_thread.smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
-    # test_smart_thread_interface_2
+    # test_smart_thread_interface_2b
     ####################################################################
     @pytest.mark.parametrize(
         "num_f1_args",
@@ -27585,6 +27594,8 @@ class TestSmartThreadInterface:
                 == ThreadState.Unregistered
             )
 
+            alpha_smart_thread[idx].smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -27943,6 +27954,9 @@ class TestSmartThreadInterface:
             beta_smart_thread.get_state(group_name="test1", name="beta")
             == ThreadState.Unregistered
         )
+
+        alpha_smart_thread.smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -28467,6 +28481,7 @@ class TestSmartThreadInterface:
                 SmartThread.get_state(group_name=group_name, name="beta")
                 == ThreadState.Unregistered
             )
+            alpha_smart_thread[idx].smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -28612,6 +28627,9 @@ class TestSmartThreadInterface:
             beta_smart_thread.get_state(group_name="test1", name="beta")
             == ThreadState.Unregistered
         )
+
+        alpha_smart_thread.smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -28786,6 +28804,7 @@ class TestSmartThreadInterface:
                 SmartThread.get_state(group_name=group_name, name="beta")
                 == ThreadState.Unregistered
             )
+            alpha_smart_thread[idx].smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -28831,6 +28850,9 @@ class TestSmartThreadExamples:
         print(recvd_msgs["beta"])
         alpha_smart_thread.smart_resume(waiters="beta")
         alpha_smart_thread.smart_join(targets="beta")
+
+        alpha_smart_thread.smart_unreg()
+
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -28880,6 +28902,7 @@ class TestSmartThreadExamples:
         print(recvd_msgs["beta"])
         alpha_smart_thread.smart_resume(waiters="beta")
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -28928,6 +28951,7 @@ class TestSmartThreadExamples:
         print(recvd_msgs["beta"])
         alpha_smart_thread.smart_resume(waiters="beta")
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -28997,6 +29021,7 @@ class TestSmartThreadExamples:
         print("alpha about to resume beta")
         alpha_smart_thread.smart_resume(waiters="beta")
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29066,6 +29091,7 @@ class TestSmartThreadExamples:
         print("alpha about to resume beta")
         alpha_smart_thread.smart_resume(waiters="beta")
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29107,6 +29133,7 @@ class TestSmartThreadExamples:
         print("alpha about to start beta")
         beta_smart_thread.smart_start()
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29155,6 +29182,7 @@ class TestSmartThreadExamples:
         print("alpha about to start beta and charlie")
         alpha_smart_thread.smart_start(targets=["beta", "charlie"])
         alpha_smart_thread.smart_join(targets=["beta", "charlie"])
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29196,6 +29224,7 @@ class TestSmartThreadExamples:
         )
         print("alpha about to unregister beta")
         alpha_smart_thread.smart_unreg(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29234,6 +29263,7 @@ class TestSmartThreadExamples:
         time.sleep(1)
         print("alpha about to join beta")
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29279,6 +29309,7 @@ class TestSmartThreadExamples:
         )
         alpha_smart_thread.smart_send(msg="hello beta", receivers="beta")
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29333,6 +29364,7 @@ class TestSmartThreadExamples:
             msg="hello remotes", receivers=("beta", "charlie")
         )
         alpha_smart_thread.smart_join(targets=("beta", "charlie"))
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29381,6 +29413,7 @@ class TestSmartThreadExamples:
             msg=("hello beta", "have a great day", 42), receivers="beta"
         )
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29451,6 +29484,7 @@ class TestSmartThreadExamples:
         )
         alpha_smart_thread.smart_wait(resumers="delta")
         alpha_smart_thread.smart_join(targets=("beta", "charlie", "delta"))
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29530,6 +29564,7 @@ class TestSmartThreadExamples:
         alpha_smart_thread.smart_send(msg_dict=msgs_to_send)
         alpha_smart_thread.smart_wait(resumers="delta")
         alpha_smart_thread.smart_join(targets=("beta", "charlie", "delta"))
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29579,6 +29614,7 @@ class TestSmartThreadExamples:
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
         print(recvd_msgs["beta"])
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29634,6 +29670,7 @@ class TestSmartThreadExamples:
         print(recvd_msgs["beta"])
         print(recvd_msgs["charlie"])
         alpha_smart_thread.smart_join(targets=("beta", "charlie"))
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29689,6 +29726,7 @@ class TestSmartThreadExamples:
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
         print(recvd_msgs["beta"])
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29776,6 +29814,7 @@ class TestSmartThreadExamples:
         recvd_msgs = alpha_smart_thread.smart_recv(senders={"charlie"})
         print(recvd_msgs["charlie"])
         alpha_smart_thread.smart_join(targets=("beta", "charlie", "delta"))
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29829,6 +29868,7 @@ class TestSmartThreadExamples:
         print("alpha about to resume beta")
         alpha_smart_thread.smart_resume(waiters="beta")
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29875,6 +29915,7 @@ class TestSmartThreadExamples:
         alpha_smart_thread.smart_resume(waiters="beta")
 
         alpha_smart_thread.smart_join(targets="beta")
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -29937,6 +29978,7 @@ class TestSmartThreadExamples:
         print(f"alpha resumed by resumers={sorted(resumed_by)}")
 
         alpha_smart_thread.smart_join(targets=["beta", "charlie", "delta"])
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -30006,6 +30048,7 @@ class TestSmartThreadExamples:
         print(f"alpha resumed by resumers={sorted(resumed_by)}")
 
         alpha_smart_thread.smart_join(targets=["beta", "charlie", "delta"])
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -30068,6 +30111,7 @@ class TestSmartThreadExamples:
         print("alpha about to resume threads")
         alpha_smart_thread.smart_resume(waiters=["beta", "charlie"])
         alpha_smart_thread.smart_join(targets=["beta", "charlie"])
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -30130,6 +30174,7 @@ class TestSmartThreadExamples:
         time.sleep(2)
         print("alpha back from sync")
         alpha_smart_thread.smart_join(targets=["beta", "charlie"])
+        alpha_smart_thread.smart_unreg()
         print("mainline alpha exiting")
 
         expected_result = "mainline alpha entered\n"
@@ -30282,16 +30327,6 @@ def scenario_driver_part1(
     log_ver.add_call_seq(name=commander_name, seq=get_formatted_call_sequence())
 
     random.seed(42)
-    # msgs = Msgs()
-
-    # config_ver = ConfigVerifier(
-    #     group_name=group_name,
-    #     commander_name=commander_name,
-    #     log_ver=log_ver,
-    #     caplog_to_use=caplog_to_use,
-    #     msgs=msgs,
-    #     max_msgs=10,
-    # )
 
     config_ver.log_test_msg(
         f"scenario_driver_part1 entry: {commander_name=} "
@@ -30304,7 +30339,6 @@ def scenario_driver_part1(
 
     scenario_builder(config_ver, **scenario_builder_args)
 
-    # config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
     config_ver.add_cmd(
         VerifyConfig(
             cmd_runners=commander_name, verify_type=VerifyType.VerifyStructures
@@ -30628,7 +30662,7 @@ class TestSmartThreadSmokeTest:
         thread_state = st.SmartThread.get_state(group_name="unknown", name="alpha")
         assert thread_state == st.ThreadState.Unregistered
 
-        st.SmartThread(group_name="test1", name="alpha")
+        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
 
         thread_state = st.SmartThread.get_state(group_name="unknown", name="alpha")
         assert thread_state == st.ThreadState.Unregistered
@@ -30638,6 +30672,8 @@ class TestSmartThreadSmokeTest:
 
         thread_state = st.SmartThread.get_state(group_name="test1", name="alpha")
         assert thread_state == st.ThreadState.Alive
+
+        alpha_smart_thread.smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -30825,6 +30861,8 @@ class TestSmartThreadSmokeTest:
         )
 
         commander_thread.smart_unreg(targets="beta")
+
+        commander_thread.smart_unreg()
 
         ################################################################
         # alpha_smart_init_alpha_debug_log_msgs
@@ -31252,8 +31290,56 @@ class TestSmartThreadSmokeTest:
         ################################################################
         # alpha_smart_unreg_info_log_msgs
         ################################################################
-        alpha_smart_unreg_info_log_msgs = [
+        alpha_smart_unreg_beta_info_log_msgs = [
             (r"SmartThread alpha \(test1\) did successful smart_unreg of \['beta'\].")
+        ]
+
+        ################################################################
+        # alpha_smart_unreg_alpha_debug_log_msgs
+        ################################################################
+        alpha_smart_unreg_alpha_debug_log_msgs = [
+            (
+                r"smart_unreg entry: requestor: alpha \(test1\), targets: \["
+                r"'alpha'\] "
+                "timeout value: None "
+                "test_smart_thread.py::TestSmartThreadSmokeTest."
+                "test_smart_thread_log_msg:[0-9]+"
+            ),
+            (r"smart_unreg _clean_registry entry: alpha \(test1\)"),
+            (
+                r"name=alpha \(test1\), is_alive=True, state=ThreadState.Alive, "
+                r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
+                r"name=alpha, auto_start=True, max_msgs=10\)"
+            ),
+            (
+                r"SmartThread alpha \(test1\) removed alpha from registry for request: "
+                r"smart_unreg"
+            ),
+            (
+                r"SmartThread alpha \(test1\) set state for thread alpha from "
+                "ThreadState.Alive to ThreadState.Unregistered"
+            ),
+            (
+                r"SmartThread alpha \(test1\) did cleanup of registry at UTC "
+                rf"{time_match}, deleted \['alpha'\]"
+            ),
+            (r"smart_unreg _clean_registry exit: alpha \(test1\)"),
+            (r"smart_unreg _clean_pair_array entry: alpha \(test1\)"),
+            (r"smart_unreg _clean_pair_array exit: alpha \(test1\)"),
+            (
+                r"smart_unreg exit: requestor: alpha \(test1\), targets: \["
+                r"'alpha'\] "
+                "timeout value: None "
+                "test_smart_thread.py::TestSmartThreadSmokeTest."
+                "test_smart_thread_log_msg:[0-9]+"
+            ),
+        ]
+
+        ################################################################
+        # alpha_smart_unreg_alpha_info_log_msgs
+        ################################################################
+        alpha_smart_unreg_alpha_info_log_msgs = [
+            (r"SmartThread alpha \(test1\) did successful smart_unreg of \['alpha'\].")
         ]
 
         ################################################################
@@ -31269,6 +31355,7 @@ class TestSmartThreadSmokeTest:
                 + alpha_smart_join_debug_log_msgs
                 + alpha_second_smart_init_beta_debug_log_msgs
                 + alpha_smart_unreg_beta_debug_log_msgs
+                + alpha_smart_unreg_alpha_debug_log_msgs
             ),
             log_level=logging.DEBUG,
             log_name=smart_thread_log_name,
@@ -31283,7 +31370,8 @@ class TestSmartThreadSmokeTest:
                 + alpha_smart_sync_info_log_msgs
                 + alpha_smart_join_info_log_msgs
                 + alpha_second_smart_init_beta_info_log_msgs
-                + alpha_smart_unreg_info_log_msgs
+                + alpha_smart_unreg_beta_info_log_msgs
+                + alpha_smart_unreg_alpha_info_log_msgs
             ),
             log_level=logging.INFO,
             log_name=smart_thread_log_name,
@@ -31766,6 +31854,8 @@ class TestSmartThreadErrors:
 
             print("\n", exc.value)
 
+        first_smart_thread.smart_unreg(targets=(first_name_arg, new_name_arg))
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -31791,6 +31881,9 @@ class TestSmartThreadErrors:
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
+
+        alpha_thread.name = "alpha"
+        alpha_thread.smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -31970,6 +32063,8 @@ class TestSmartThreadErrors:
         alpha_st.smart_unreg(targets="beta")
 
         print("\n", exc.value)
+
+        alpha_st.smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -32176,6 +32271,8 @@ class TestSmartThreadErrors:
             assert re.fullmatch(exp_error_msg, str(exc6.value))
 
             print("\n", exc6.value)
+
+        alpha_thread.smart_unreg()
 
         logger.debug("mainline exiting")
 
