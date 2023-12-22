@@ -14876,9 +14876,9 @@ class ConfigVerifier:
         )
 
     ####################################################################
-    # build_sender_resumer_count_scenario
+    # build_send_resume_cnt_scenario
     ####################################################################
-    def build_sender_resumer_count_scenario(
+    def build_send_resume_cnt_scenario(
         self,
         request_type: st.ReqType,
         pre_count: int,
@@ -14906,7 +14906,7 @@ class ConfigVerifier:
             sender_names=senders_resumers,
             receiver_names=receiver_waiter,
             num_msgs=1,
-            text="build_sender_resumer_count_scenario",
+            text="build_send_resume_cnt_scenario",
         )
 
         ################################################################
@@ -17394,9 +17394,9 @@ class ConfigVerifier:
         )
 
     ####################################################################
-    # build_smart_start_suite
+    # build_smart_start_scenario
     ####################################################################
-    def build_smart_start_suite(
+    def build_smart_start_scenario(
         self,
         num_auto_start: int,
         num_manual_start: int,
@@ -36080,7 +36080,7 @@ class TestSmartThreadComboScenarios:
             TimeoutType.TimeoutTrue,
         ):
             if timeout_type_arg == TimeoutType.TimeoutTrue and (
-                    num_timeout_syncers_arg == 0
+                num_timeout_syncers_arg == 0
             ):
                 continue
             for num_syncers_arg in (1, 2, 3, 16):
@@ -36127,40 +36127,11 @@ class TestSmartThreadComboScenarios:
         DeadlockScenario.SyncDeadlock,
     ]
 
-    # @pytest.mark.parametrize("conflict_deadlock_1_arg", deadlock_arg_list)
-    # @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
-    # @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
-    # @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
-    @pytest.mark.parametrize(
-        "conflict_deadlock_1_arg",
-        [
-            DeadlockScenario.NormalSync,
-            DeadlockScenario.SyncDeadlock,
-            DeadlockScenario.RecvDeadlock,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "conflict_deadlock_2_arg",
-        [
-            DeadlockScenario.RecvDeadlock,
-            DeadlockScenario.WaitDeadlock,
-            DeadlockScenario.NormalSendRecv,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "conflict_deadlock_3_arg",
-        [
-            DeadlockScenario.NormalSync,
-            DeadlockScenario.WaitDeadlock,
-            DeadlockScenario.SyncDeadlock,
-        ],
-    )
-    @pytest.mark.parametrize("num_cd_actors_arg", [3])
-    @pytest.mark.seltest
+    @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
+    @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
+    # @pytest.mark.seltest
     def test_deadlock_scenario(
         self,
-        conflict_deadlock_1_arg: DeadlockScenario,
-        conflict_deadlock_2_arg: DeadlockScenario,
         conflict_deadlock_3_arg: DeadlockScenario,
         num_cd_actors_arg: int,
         caplog: pytest.LogCaptureFixture,
@@ -36168,44 +36139,51 @@ class TestSmartThreadComboScenarios:
         """Test smart_sync scenarios.
 
         Args:
-            conflict_deadlock_1_arg: first scenario
-            conflict_deadlock_2_arg: second scenario
             conflict_deadlock_3_arg: third scenario
             num_cd_actors_arg: number syncers, resumers, and waiters
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {
-            "scenario_list": [
-                conflict_deadlock_1_arg,
-                conflict_deadlock_2_arg,
-                conflict_deadlock_3_arg,
-            ],
-            "num_cd_actors": num_cd_actors_arg,
-        }
+        # conflict_deadlock_1_arg: first scenario
+        # conflict_deadlock_2_arg: second scenario
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for conflict_deadlock_1_arg in TestSmartThreadComboScenarios.deadlock_arg_list:
+            for conflict_deadlock_2_arg in TestSmartThreadComboScenarios.deadlock_arg_list:
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "scenario_list": [
+                        conflict_deadlock_1_arg,
+                        conflict_deadlock_2_arg,
+                        conflict_deadlock_3_arg,
+                    ],
+                    "num_cd_actors": num_cd_actors_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_deadlock_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_deadlock_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[
-                num_cd_actors_arg % num_commander_configs
-            ],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_smart_start_scenarios
     ####################################################################
-    @pytest.mark.parametrize("num_auto_start_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_manual_start_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_alive_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stopped_arg", [0, 1, 2])
     # @pytest.mark.seltest
     def test_smart_start_scenarios(
         self,
-        num_auto_start_arg: int,
-        num_manual_start_arg: int,
         num_unreg_arg: int,
         num_alive_arg: int,
         num_stopped_arg: int,
@@ -36214,56 +36192,53 @@ class TestSmartThreadComboScenarios:
         """Test smart_sync scenarios.
 
         Args:
-            num_auto_start_arg: number of threads to auto start
-            num_manual_start_arg: number of thread to manually start
             num_unreg_arg: number threads to not create for timeout
             num_alive_arg: number threads alive already
             num_stopped_arg: number threads stopped
             caplog: pytest fixture to capture log output
 
         """
-        total_num_targets = (
-            num_auto_start_arg
-            + num_manual_start_arg
-            + num_unreg_arg
-            + num_alive_arg
-            + num_stopped_arg
-        )
+        # num_auto_start_arg: number of threads to auto start
+        # num_manual_start_arg: number of thread to manually start
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for num_auto_start_arg in (0, 1, 2):
+            for num_manual_start_arg in (0, 1, 2):
+                if (num_auto_start_arg + num_manual_start_arg + num_unreg_arg
+                        + num_alive_arg + num_stopped_arg) == 0:
+                    continue
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "num_auto_start": num_auto_start_arg,
+                    "num_manual_start": num_manual_start_arg,
+                    "num_unreg": num_unreg_arg,
+                    "num_alive": num_alive_arg,
+                    "num_stopped": num_stopped_arg,
+                }
 
-        if total_num_targets == 0:
-            return
-
-        args_for_scenario_builder: dict[str, Any] = {
-            "num_auto_start": num_auto_start_arg,
-            "num_manual_start": num_manual_start_arg,
-            "num_unreg": num_unreg_arg,
-            "num_alive": num_alive_arg,
-            "num_stopped": num_stopped_arg,
-        }
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_smart_start_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_smart_start_suite,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[
-                total_num_targets % num_commander_configs
-            ],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_smart_recv_sender_count_scenario
     ####################################################################
-    @pytest.mark.parametrize(
-        "request_type_arg", [st.ReqType.Smart_recv, st.ReqType.Smart_wait]
-    )
-    @pytest.mark.parametrize("pre_count_arg", [0, 1, 2, 3, 4, 5])
     @pytest.mark.parametrize("num_count_0_arg", [0, 1, 2, 3, 4, 5])
     @pytest.mark.parametrize("num_count_1_arg", [0, 1, 2, 3, 4, 5])
     # @pytest.mark.seltest
-    def test_sender_resumer_count_scenario(
+    def test_send_resume_cnt_scenario(
         self,
-        request_type_arg: st.ReqType,
-        pre_count_arg: int,
         num_count_0_arg: int,
         num_count_1_arg: int,
         caplog: pytest.LogCaptureFixture,
@@ -36271,49 +36246,36 @@ class TestSmartThreadComboScenarios:
         """Test smart_sync scenarios.
 
         Args:
-            request_type_arg: the request to do
-            pre_count_arg: the sender or resumer count pre 1st batch
             num_count_0_arg: the sender or resumer count for 1st batch
             num_count_1_arg: the sender or resumer count for 2nd batch
             caplog: pytest fixture to capture log output
 
         """
-        total_counts = num_count_0_arg + num_count_1_arg
-        args_for_scenario_builder: dict[str, Any] = {
-            "request_type": request_type_arg,
-            "pre_count": pre_count_arg,
-            "num_count_0": num_count_0_arg,
-            "num_count_1": num_count_1_arg,
-        }
+        # request_type_arg: the request to do
+        # pre_count_arg: the sender or resumer count pre 1st batch
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for request_type_arg in (st.ReqType.Smart_recv, st.ReqType.Smart_wait):
+            for pre_count_arg in (0, 1, 2, 3, 4, 5):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "request_type": request_type_arg,
+                    "pre_count": pre_count_arg,
+                    "num_count_0": num_count_0_arg,
+                    "num_count_1": num_count_1_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_send_resume_cnt_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sender_resumer_count_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[total_counts % num_commander_configs],
+            scenario_driver_parms=sdparms,
         )
-
-    # ##################################################################
-    # # test_smart_thread_scenarios
-    # ##################################################################
-    # @pytest.mark.parametrize("random_seed_arg", [1, 2, 3])
-    # def test_smart_thread_random_scenarios(
-    #         self,
-    #         random_seed_arg: int,
-    #         caplog: pytest.LogCaptureFixture
-    # ) -> None:
-    #     """Test meta configuration scenarios.
-    #
-    #     Args:
-    #         caplog: pytest fixture to capture log output
-    #
-    #     """
-    #
-    #     random.seed(random_seed_arg)
-    #     num_threads = random.randint(2, 8)
-    #
-    #     f1_names = list(config_ver.f1_thread_names.keys())
-    #
-    #     f1_names_to_use = random.sample(f1_names, num_threads)
-    #
-    #     names = ['alpha'] + f1_names_to_use
