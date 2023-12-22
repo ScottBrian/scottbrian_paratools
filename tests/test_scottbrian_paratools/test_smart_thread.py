@@ -11256,9 +11256,9 @@ class ConfigVerifier:
         )
 
     ####################################################################
-    # build_wait_scenario_suite
+    # build_wait_scenario2
     ####################################################################
-    def build_wait_scenario_suite(
+    def build_wait_scenario2(
         self, num_waiters: int, num_actors: int, actor_list: list[Actors]
     ) -> None:
         """Adds cmds to the cmd queue.
@@ -17539,9 +17539,9 @@ class ConfigVerifier:
         return self.build_start_suite(start_names=names)
 
     ####################################################################
-    # build_sync_scenario_suite
+    # build_sync_scenario
     ####################################################################
-    def build_sync_scenario_suite(
+    def build_sync_scenario(
         self,
         timeout_type: TimeoutType,
         num_syncers: int,
@@ -32367,6 +32367,8 @@ class TestSmartThreadErrors:
 
         print("\n", exc2.value)
 
+        alpha_thread.smart_unreg(targets=("alpha", "beta"))
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -32504,6 +32506,8 @@ class TestSmartThreadErrors:
         alpha_thread.smart_resume(waiters="beta", timeout=5)
         alpha_thread.smart_join(targets="beta", timeout=5)
 
+        alpha_thread.smart_unreg(targets="alpha")
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -32591,6 +32595,8 @@ class TestSmartThreadErrors:
         alpha_thread.smart_resume(waiters="beta", timeout=5)
         alpha_thread.smart_join(targets="beta", timeout=5)
 
+        alpha_thread.smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -32677,6 +32683,8 @@ class TestSmartThreadErrors:
         ################################################################
         alpha_thread.smart_resume(waiters="beta", timeout=5)
         alpha_thread.smart_join(targets="beta", timeout=5)
+
+        alpha_thread.smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -32874,7 +32882,7 @@ class TestSmartThreadErrors:
         # join beta
         ################################################################
         alpha_thread.smart_join(targets="beta", timeout=5)
-        alpha_thread.smart_unreg(targets="delta")
+        alpha_thread.smart_unreg(targets=("delta", "alpha"))
 
         logger.debug("mainline exiting")
 
@@ -33253,6 +33261,8 @@ class TestSmartThreadErrors:
         msgs.queue_msg("beta")
         alpha_thread.smart_join(targets="beta", timeout=5)
 
+        alpha_thread.smart_unreg()
+
         logger.debug("mainline exiting")
 
     ####################################################################
@@ -33280,6 +33290,8 @@ class TestSmartThreadErrors:
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
+
+        alpha_thread.smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -33336,6 +33348,8 @@ class TestSmartThreadErrors:
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
+
+        alpha_thread.smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -33526,6 +33540,8 @@ class TestSmartThreadErrors:
         msgs.queue_msg("charlie")
         alpha_thread.smart_join(targets=("beta", "charlie"))
 
+        alpha_thread.smart_unreg()
+
         logger.debug("mainline exit")
 
     ####################################################################
@@ -33713,6 +33729,11 @@ class TestSmartThreadErrors:
 
         beta_1_thread.join()
 
+        alpha_s_thread.smart_unreg(targets=("alpha", "charlie"))
+
+        if group_name_arg != "test1":
+            alpha_s_2_thread.smart_unreg()
+
         logger.debug("mainline exit")
 
     ####################################################################
@@ -33883,6 +33904,8 @@ class TestSmartThreadErrors:
 
         alpha_s_thread.smart_join(targets="beta")
 
+        alpha_s_thread.smart_unreg()
+
         logger.debug("mainline exit")
 
 
@@ -34028,10 +34051,12 @@ class TestSmartThreadRtns:
         st.SmartThread(group_name="test1", name="charlie", target_rtn=f2)
         alpha_smart_thread.smart_join(targets="charlie")
 
-        ####################################################################
-        # test_get_current_smart_thread
-        ####################################################################
+        alpha_smart_thread.smart_unreg()
+        alpha_smart_thread2.smart_unreg()
 
+    ####################################################################
+    # test_get_current_smart_thread
+    ####################################################################
     @pytest.mark.parametrize(
         "group_names_arg",
         [
@@ -34102,6 +34127,7 @@ class TestSmartThreadRtns:
         for alpha_thread in alpha_threads:
             alpha_thread.smart_resume(waiters=thread_names_arg)
             alpha_thread.smart_join(targets=thread_names_arg)
+            alpha_thread.smart_unreg()
 
         logger.debug("mainline exiting")
 
@@ -34191,6 +34217,8 @@ class TestSmartThreadRtns:
 
             alpha_smart_thread.smart_join(targets=active_names | reg_names)
 
+        alpha_smart_thread.smart_unreg()
+
         logger.debug("mainline exiting")
 
 
@@ -34245,6 +34273,8 @@ class TestSmartThreadConfigScenarios:
         wait_event.set()
 
         beta_smart_thread.thread.join()
+
+        alpha_smart_thread.smart_unreg()
 
         logger.debug(f"mainline exit")
 
@@ -34463,6 +34493,7 @@ class TestSmartBasicScenarios:
                     target=target_msg_name, msg="exit"
                 )
                 alpha_threads[group_name].smart_join(targets=target)
+            alpha_threads[group_name].smart_unreg()
 
         elapsed_time = time.time() - start_time
         logger.debug(f"mainline exiting elapsed time: {elapsed_time}")
@@ -35751,16 +35782,6 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_srrw_scenario
     ####################################################################
-    @pytest.mark.parametrize(
-        "req_type_arg",
-        [
-            st.ReqType.Smart_send,
-            st.ReqType.Smart_recv,
-            st.ReqType.Smart_resume,
-            st.ReqType.Smart_wait,
-        ],
-    )
-    @pytest.mark.parametrize("num_requestors_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
@@ -35770,8 +35791,6 @@ class TestSmartThreadComboScenarios:
     # @pytest.mark.seltest
     def test_srrw_scenario(
         self,
-        req_type_arg: st.ReqType,
-        num_requestors_arg: int,
         num_start_before_arg: int,
         num_unreg_before_arg: int,
         num_stop_before_arg: int,
@@ -35784,9 +35803,6 @@ class TestSmartThreadComboScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            req_type_arg: specifies whether to do resume or wait
-            num_requestors_arg: number of threads doing resumes or
-                waits
             num_start_before_arg: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
@@ -35823,8 +35839,7 @@ class TestSmartThreadComboScenarios:
         )
 
         total_arg_counts = (
-            num_requestors_arg
-            + num_start_before_arg
+            num_start_before_arg
             + num_unreg_before_arg
             + num_stop_before_arg
             + num_unreg_after_arg
@@ -35832,32 +35847,50 @@ class TestSmartThreadComboScenarios:
             + num_stop_after_err_arg
         )
 
-        if total_arg_counts - num_requestors_arg == 0:
+        if total_arg_counts == 0:
             return
 
-        args_for_scenario_builder: dict[str, Any] = {
-            "req_type": req_type_arg,
-            "num_requestors": num_requestors_arg,
-            "num_start_before": num_start_before_arg,
-            "num_unreg_before": num_unreg_before_arg,
-            "num_stop_before": num_stop_before_arg,
-            "num_unreg_after": num_unreg_after_arg,
-            "num_stop_after_ok": num_stop_after_ok_arg,
-            "num_stop_after_err": num_stop_after_err_arg,
-        }
+        # req_type_arg: specifies whether to do resume or wait
+        # num_requestors_arg: number of threads doing resumes or waits
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for req_type_arg in (
+            st.ReqType.Smart_send,
+            st.ReqType.Smart_recv,
+            st.ReqType.Smart_resume,
+            st.ReqType.Smart_wait,
+        ):
+            for num_requestors_arg in (1, 2, 3):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "req_type": req_type_arg,
+                    "num_requestors": num_requestors_arg,
+                    "num_start_before": num_start_before_arg,
+                    "num_unreg_before": num_unreg_before_arg,
+                    "num_stop_before": num_stop_before_arg,
+                    "num_unreg_after": num_unreg_after_arg,
+                    "num_stop_after_ok": num_stop_after_ok_arg,
+                    "num_stop_after_err": num_stop_after_err_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_srrw_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_srrw_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[total_arg_counts % num_commander_configs],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
     # test_wait_scenario
     ####################################################################
-    @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
@@ -35866,8 +35899,6 @@ class TestSmartThreadComboScenarios:
     # @pytest.mark.seltest
     def test_wait_scenario(
         self,
-        num_waiters_arg: int,
-        num_start_before_arg: int,
         num_unreg_before_arg: int,
         num_stop_before_arg: int,
         num_unreg_after_arg: int,
@@ -35879,10 +35910,6 @@ class TestSmartThreadComboScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            num_waiters_arg: number of threads doing resumes
-            num_start_before_arg: number of target_rtn threads that will
-                be started and issue a wait before the resume is done,
-                and should succeed
             num_unreg_before_arg: number of target_rtn threads that will
                 be registered and then unregistered before the resume,
                 and then started after the resume, and should succeed
@@ -35916,33 +35943,47 @@ class TestSmartThreadComboScenarios:
         )
 
         total_arg_counts = (
-            num_waiters_arg
-            + num_start_before_arg
-            + num_unreg_before_arg
+            num_unreg_before_arg
             + num_stop_before_arg
             + num_unreg_after_arg
             + num_stop_after_ok_arg
             + num_stop_after_err_arg
         )
 
-        if total_arg_counts - num_waiters_arg == 0:
-            return
+        # num_waiters_arg: number of threads doing resumes
+        # num_start_before_arg: number of target_rtn threads that will
+        #     be started and issue a wait before the resume is done,
+        #     and should succeed
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for num_waiters_arg in (1, 2, 3):
+            for num_start_before_arg in (0, 1, 2):
+                if num_start_before_arg + total_arg_counts == 0:
+                    continue
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "num_waiters": num_waiters_arg,
+                    "num_start_before": num_start_before_arg,
+                    "num_unreg_before": num_unreg_before_arg,
+                    "num_stop_before": num_stop_before_arg,
+                    "num_unreg_after": num_unreg_after_arg,
+                    "num_stop_after_ok": num_stop_after_ok_arg,
+                    "num_stop_after_err": num_stop_after_err_arg,
+                }
 
-        args_for_scenario_builder: dict[str, Any] = {
-            "num_waiters": num_waiters_arg,
-            "num_start_before": num_start_before_arg,
-            "num_unreg_before": num_unreg_before_arg,
-            "num_stop_before": num_stop_before_arg,
-            "num_unreg_after": num_unreg_after_arg,
-            "num_stop_after_ok": num_stop_after_ok_arg,
-            "num_stop_after_err": num_stop_after_err_arg,
-        }
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_wait_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_wait_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[total_arg_counts % num_commander_configs],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -35958,13 +35999,12 @@ class TestSmartThreadComboScenarios:
     ]
 
     ####################################################################
-    # test_wait_scenario2_part_1_1
+    # test_wait_scenario2
     ####################################################################
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_1_1(
+    def test_wait_scenario2(
         self,
         actor_1_arg: Actors,
         actor_2_arg: Actors,
@@ -35980,324 +36020,42 @@ class TestSmartThreadComboScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        self.build_wait_scenario2(
-            num_waiters_arg=1,
-            num_actors_arg=1,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
+        # num_waiters_arg: number of threads that will do the wait
+        # num_actors_arg: number of actor threads
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for num_waiters_arg in (1, 2, 3):
+            for num_actors_arg in (1, 2, 3):
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "num_waiters": num_waiters_arg,
+                    "num_actors": num_actors_arg,
+                    "actor_list": [actor_1_arg, actor_2_arg, actor_3_arg],
+                }
 
-    ####################################################################
-    # test_wait_scenario2_part_1_2
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_1_2(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=1,
-            num_actors_arg=2,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # test_wait_scenario2_part_1_3
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_1_3(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=1,
-            num_actors_arg=3,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # test_wait_scenario2_part_2_1
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_2_1(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=2,
-            num_actors_arg=1,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # test_wait_scenario2_part_2_2
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_2_2(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=2,
-            num_actors_arg=2,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # test_wait_scenario2_part_2_3
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_2_3(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=2,
-            num_actors_arg=3,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # test_wait_scenario2_part_3_1
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_3_1(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=3,
-            num_actors_arg=1,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # test_wait_scenario2_part_3_2
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_3_2(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=3,
-            num_actors_arg=2,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # test_wait_scenario2_part_3_3
-    ####################################################################
-    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
-    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
-    # @pytest.mark.seltest
-    def test_wait_scenario2_part_3_3(
-        self,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
-
-        """
-        self.build_wait_scenario2(
-            num_waiters_arg=3,
-            num_actors_arg=3,
-            actor_1_arg=actor_1_arg,
-            actor_2_arg=actor_2_arg,
-            actor_3_arg=actor_3_arg,
-            caplog_to_use=caplog,
-        )
-
-    ####################################################################
-    # build_wait_scenario2
-    ####################################################################
-    @staticmethod
-    def build_wait_scenario2(
-        num_waiters_arg: int,
-        num_actors_arg: int,
-        actor_1_arg: Actors,
-        actor_2_arg: Actors,
-        actor_3_arg: Actors,
-        caplog_to_use: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test wait scenarios.
-
-        Args:
-            num_waiters_arg: number of threads that will do the wait
-            num_actors_arg: number of actor threads
-            actor_1_arg: type of actor that will do the first resume
-            actor_2_arg: type of actor that will do the second resume
-            actor_3_arg: type of actor that will do the third resume
-            caplog_to_use: pytest fixture to capture log output
-
-        """
-        total_arg_counts = num_waiters_arg + num_actors_arg
-
-        args_for_scenario_builder: dict[str, Any] = {
-            "num_waiters": num_waiters_arg,
-            "num_actors": num_actors_arg,
-            "actor_list": [actor_1_arg, actor_2_arg, actor_3_arg],
-        }
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_wait_scenario2,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_wait_scenario_suite,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog_to_use,
-            commander_config=commander_config[total_arg_counts % num_commander_configs],
+            caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
-    # test_sync_scenarios
+    # test_sync_scenario
     ####################################################################
-    @pytest.mark.parametrize(
-        "timeout_type_arg",
-        [TimeoutType.TimeoutNone, TimeoutType.TimeoutFalse, TimeoutType.TimeoutTrue],
-    )
-    @pytest.mark.parametrize("num_syncers_arg", [1, 2, 3, 16])
     @pytest.mark.parametrize("num_stopped_syncers_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("num_timeout_syncers_arg", [0, 1, 2, 3])
     # @pytest.mark.seltest
-    def test_sync_scenarios(
+    def test_sync_scenario(
         self,
-        timeout_type_arg: TimeoutType,
-        num_syncers_arg: int,
         num_stopped_syncers_arg: int,
         num_timeout_syncers_arg: int,
         caplog: pytest.LogCaptureFixture,
@@ -36305,9 +36063,6 @@ class TestSmartThreadComboScenarios:
         """Test smart_sync scenarios.
 
         Args:
-            timeout_type_arg: timeout for None, False, or True
-            num_syncers_arg: number of threads that will successfully
-                sync
             num_stopped_syncers_arg: number of threads that will
                 cause a not alive error
             num_timeout_syncers_arg: number of threads that will
@@ -36315,30 +36070,47 @@ class TestSmartThreadComboScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        total_arg_counts = (
-            num_syncers_arg + num_stopped_syncers_arg + num_timeout_syncers_arg
-        )
-
-        if total_arg_counts < 2:  # we need at least two to sync
-            return
-
-        if timeout_type_arg == TimeoutType.TimeoutTrue and (
-            num_timeout_syncers_arg == 0
+        # timeout_type_arg: timeout for None, False, or True
+        # num_syncers_arg: number of threads that will successfully sync
+        sdparms: list[ScenarioDriverParms] = []
+        config_idx = -1
+        for timeout_type_arg in (
+            TimeoutType.TimeoutNone,
+            TimeoutType.TimeoutFalse,
+            TimeoutType.TimeoutTrue,
         ):
-            return
+            if timeout_type_arg == TimeoutType.TimeoutTrue and (
+                    num_timeout_syncers_arg == 0
+            ):
+                continue
+            for num_syncers_arg in (1, 2, 3, 16):
+                if (
+                    num_syncers_arg + num_stopped_syncers_arg + num_timeout_syncers_arg
+                    < 2
+                ):
+                    continue  # we need at least two to sync
 
-        args_for_scenario_builder: dict[str, Any] = {
-            "timeout_type": timeout_type_arg,
-            "num_syncers": num_syncers_arg,
-            "num_stopped_syncers": num_stopped_syncers_arg,
-            "num_timeout_syncers": num_timeout_syncers_arg,
-        }
+                config_idx += 1
+                args_for_scenario_builder: dict[str, Any] = {
+                    "timeout_type": timeout_type_arg,
+                    "num_syncers": num_syncers_arg,
+                    "num_stopped_syncers": num_stopped_syncers_arg,
+                    "num_timeout_syncers": num_timeout_syncers_arg,
+                }
+
+                sdparms.append(
+                    ScenarioDriverParms(
+                        scenario_builder=ConfigVerifier.build_sync_scenario,
+                        scenario_builder_args=args_for_scenario_builder,
+                        commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                        commander_name=f"alpha{config_idx}",
+                        group_name=f"test{config_idx}",
+                    )
+                )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_scenario_suite,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[total_arg_counts % num_commander_configs],
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
