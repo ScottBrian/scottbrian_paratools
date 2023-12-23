@@ -5274,13 +5274,14 @@ LogSearchItems: TypeAlias = Union[
 # MockGetTargetState
 ########################################################################
 TargetsDict: TypeAlias = dict[str, dict[str, tuple[st.ThreadState, st.ThreadState]]]
+GroupTargetsDict: TypeAlias = dict[str, TargetsDict]
 
 
 class MockGetTargetState:
     """Tracks targets whose state is to be reported differently."""
 
-    targets: ClassVar[TargetsDict] = {}
-    config_ver: ClassVar["ConfigVerifier"]
+    targets: ClassVar[GroupTargetsDict] = {}
+    config_ver: ClassVar[dict[str, "ConfigVerifier"]] = {}
 
     def __init__(self, targets: TargetsDict, config_ver: "ConfigVerifier") -> None:
         """Initialize the mock target_rtn state.
@@ -5289,8 +5290,8 @@ class MockGetTargetState:
             targets: dictionary of targets
             config_ver: instance of ConfigurationVerifier
         """
-        MockGetTargetState.targets = targets
-        MockGetTargetState.config_ver = config_ver
+        MockGetTargetState.targets[config_ver.group_name] = targets
+        MockGetTargetState.config_ver[config_ver.group_name] = config_ver
 
     ####################################################################
     # mock_get_target_state
@@ -5343,13 +5344,18 @@ class MockGetTargetState:
                 ret_state = self.registry[pk_remote.remote].st_state
 
         name = self.name  # type: ignore
-        if name in MockGetTargetState.targets:
-            if pk_remote.remote in MockGetTargetState.targets[name]:
-                if ret_state == MockGetTargetState.targets[name][pk_remote.remote][0]:
+        if name in MockGetTargetState.targets[group_name]:
+            if pk_remote.remote in MockGetTargetState.targets[group_name][name]:
+                if (
+                    ret_state
+                    == MockGetTargetState.targets[group_name][name][pk_remote.remote][0]
+                ):
                     old_ret_state = ret_state
-                    ret_state = MockGetTargetState.targets[name][pk_remote.remote][1]
-                    MockGetTargetState.config_ver.log_test_msg(
-                        f"mock {name} changed state for "
+                    ret_state = MockGetTargetState.targets[group_name][name][
+                        pk_remote.remote
+                    ][1]
+                    MockGetTargetState.config_ver[group_name].log_test_msg(
+                        f"mock {name} ({group_name}) changed state for "
                         f"{pk_remote.remote=} "
                         f"from {old_ret_state=} to {ret_state=}"
                     )
@@ -11995,7 +12001,7 @@ class ConfigVerifier:
     ####################################################################
     # build_resume_scenario
     ####################################################################
-    def build_resume_scenarios(
+    def build_resume_scenario(
         self,
         num_resumers: int,
         num_start_before: int,
@@ -12118,7 +12124,7 @@ class ConfigVerifier:
         )
 
         ################################################################
-        # choose stop_after_ok_names
+        # choose stop_after_err_names
         ################################################################
         stop_after_err_names = self.choose_names(
             name_collection=unregistered_names_copy,
@@ -12228,7 +12234,7 @@ class ConfigVerifier:
                 )
             else:
                 raise IncorrectDataDetected(
-                    "build_resume_scenarios "
+                    "build_resume_scenario "
                     f"{waiter=} not found in "
                     f"{start_before_names=} nor "
                     f"{unreg_before_names=} nor "
@@ -12384,7 +12390,7 @@ class ConfigVerifier:
                 )
             else:
                 raise IncorrectDataDetected(
-                    "build_resume_scenarios "
+                    "build_resume_scenario "
                     f"{waiter=} not found in "
                     f"{unreg_after_names=} nor "
                     f"{stop_after_err_names=}"
@@ -13123,7 +13129,7 @@ class ConfigVerifier:
                 )
             else:
                 raise IncorrectDataDetected(
-                    "build_resume_scenarios "
+                    "build_wait_scenario "
                     f"{resumer=} not found in "
                     f"{start_before_names=} nor "
                     f"{unreg_before_names=} nor "
@@ -13274,7 +13280,7 @@ class ConfigVerifier:
                 )
             else:
                 raise IncorrectDataDetected(
-                    "build_resume_scenarios "
+                    "build_wait_scenario "
                     f"{resumer=} not found in "
                     f"{unreg_after_names=} nor "
                     f"{stop_after_err_names=}"
@@ -20407,6 +20413,7 @@ class ConfigVerifier:
                 f"wait_for_monitor timed out for {cmd_runner=} ({self.group_name}) "
                 f"and {rtn_name=} {start_time=}"
             )
+            self.log_test_msg(error_msg)
             raise CmdTimedOut(error_msg)
 
     ####################################################################
@@ -20793,7 +20800,7 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(
-            f"handle_wait entry for {cmd_runner=}, {resumers=}, "
+            f"handle_wait entry for {cmd_runner=} ({self.group_name}), {resumers=}, "
             f"{resumer_count=}, {stopped_remotes=}, "
             f"{timeout_remotes=}, {deadlock_remotes=}"
         )
@@ -20940,7 +20947,8 @@ class ConfigVerifier:
             self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="handle_wait")
 
         self.log_test_msg(
-            f"handle_wait exit for {cmd_runner=}, " f"{resumers=}, {stopped_remotes=}"
+            f"handle_wait exit for {cmd_runner=} ({self.group_name}), {resumers=}, "
+            f"{stopped_remotes=}"
         )
 
     ####################################################################
@@ -35682,7 +35690,7 @@ class TestSmartThreadComboScenarios:
         )
 
     ####################################################################
-    # test_resume_scenarios
+    # test_resume_scenario
     ####################################################################
     @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
@@ -35690,7 +35698,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     # @pytest.mark.seltest
-    def test_resume_scenarios(
+    def test_resume_scenario(
         self,
         num_unreg_before_arg: int,
         num_stop_before_arg: int,
@@ -35766,7 +35774,7 @@ class TestSmartThreadComboScenarios:
 
                 sdparms.append(
                     ScenarioDriverParms(
-                        scenario_builder=ConfigVerifier.build_resume_scenarios,
+                        scenario_builder=ConfigVerifier.build_resume_scenario,
                         scenario_builder_args=args_for_scenario_builder,
                         commander_config=AppConfig(config_idx % len(AppConfig) + 1),
                         commander_name=f"alpha{config_idx}",
@@ -36149,7 +36157,9 @@ class TestSmartThreadComboScenarios:
         sdparms: list[ScenarioDriverParms] = []
         config_idx = -1
         for conflict_deadlock_1_arg in TestSmartThreadComboScenarios.deadlock_arg_list:
-            for conflict_deadlock_2_arg in TestSmartThreadComboScenarios.deadlock_arg_list:
+            for (
+                conflict_deadlock_2_arg
+            ) in TestSmartThreadComboScenarios.deadlock_arg_list:
                 config_idx += 1
                 args_for_scenario_builder: dict[str, Any] = {
                     "scenario_list": [
@@ -36204,8 +36214,13 @@ class TestSmartThreadComboScenarios:
         config_idx = -1
         for num_auto_start_arg in (0, 1, 2):
             for num_manual_start_arg in (0, 1, 2):
-                if (num_auto_start_arg + num_manual_start_arg + num_unreg_arg
-                        + num_alive_arg + num_stopped_arg) == 0:
+                if (
+                    num_auto_start_arg
+                    + num_manual_start_arg
+                    + num_unreg_arg
+                    + num_alive_arg
+                    + num_stopped_arg
+                ) == 0:
                     continue
                 config_idx += 1
                 args_for_scenario_builder: dict[str, Any] = {
