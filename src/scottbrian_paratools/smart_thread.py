@@ -376,9 +376,8 @@ Expected output for Example8::
 ########################################################################
 # Standard Library
 ########################################################################
-from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, UTC
 from enum import auto, Flag, StrEnum
 
@@ -2254,7 +2253,7 @@ class SmartThread:
                 log_msg=log_msg,
             )
 
-            self.unreged_targets: set[str] = set()
+            self.unreged_targets = set()
             request_pending_targets: set[str] = set()
 
             work_remotes = cmd_block.targets.copy()

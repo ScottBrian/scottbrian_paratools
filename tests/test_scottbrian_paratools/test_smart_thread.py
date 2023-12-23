@@ -16,7 +16,7 @@ import queue
 import logging
 
 from more_itertools import roundrobin
-from pprint import pprint
+
 import random
 import re
 from sys import _getframe
@@ -3612,7 +3612,6 @@ class F1AppExitLogSearchItem(LogSearchItem):
         target = split_msg[2]
 
         self.config_ver.expected_registered[target].is_alive = False
-        self.config_ver.log_test_msg(f"SBT1 set is_alive to False")
 
         self.config_ver.last_thread_stop_msg_idx[target] = self.found_log_idx
 
@@ -5740,11 +5739,8 @@ class ConfigVerifier:
                     self.monitor_condition.notify_all()
                 continue
 
-            # self.log_test_msg(f"monitor ({self.group_name}) about to look for messages")
             while self.get_log_msgs():
-                # self.log_test_msg(f"monitor ({self.group_name}) in first while")
                 while self.log_found_items:
-                    # self.log_test_msg(f"monitor ({self.group_name}) in second while")
                     found_log_item = self.log_found_items.popleft()
 
                     # log the log msg being processed but mangle it a
@@ -5764,7 +5760,7 @@ class ConfigVerifier:
                         raise
 
                     last_msg_processed_time = time.time()
-            # self.log_test_msg(f"monitor ({self.group_name}) completed message loop")
+
             if time.time() - last_msg_processed_time > timeout_value_seconds:
                 self.abort_test_case = True
                 self.abort_all_f1_threads()
@@ -7616,9 +7612,9 @@ class ConfigVerifier:
         )
 
     ####################################################################
-    # build_pending_sans_sync_scenario
+    # build_pend_sans_sync_scenario
     ####################################################################
-    def build_pending_sans_sync_scenario(
+    def build_pend_sans_sync_scenario(
         self,
         request_type: st.ReqType,
         pending_request_tf: bool,
@@ -7638,7 +7634,7 @@ class ConfigVerifier:
 
         Notes:
             There are two test cases dealing with the pending flags:
-            test_pending_sans_sync_scenario:
+            test_pend_sans_sync_scenario:
                 this will test combinations for:
                     pending_request: True, False
                     pending_msg: count of 0, 1, 2
@@ -7649,7 +7645,7 @@ class ConfigVerifier:
                     smart_wait
                     smart_resume
 
-            test_pending_sync_only_scenario:
+            test_pend_sync_only_scenario:
                 this will test combinations for:
                     pending_request: True
                     pending_msg: count of 0, 1, 2
@@ -7705,7 +7701,7 @@ class ConfigVerifier:
             sender_names=remote_names,
             receiver_names=pending_names,
             num_msgs=max(1, pending_msg_count),
-            text="build_pending_sans_sync_scenario",
+            text="build_pend_sans_sync_scenario",
         )
 
         for idx in range(pending_msg_count):
@@ -7796,7 +7792,7 @@ class ConfigVerifier:
                     sender_names=pending_names,
                     receiver_names=remote_names,
                     num_msgs=1,
-                    text="build_pending_sans_sync_scenario",
+                    text="build_pend_sans_sync_scenario",
                 )
                 pend_req_serial_num = self.add_cmd(
                     SendMsg(
@@ -7847,7 +7843,7 @@ class ConfigVerifier:
                 )
             else:
                 raise InvalidInputDetected(
-                    "build_pending_sans_sync_scenario detected invalid "
+                    "build_pend_sans_sync_scenario detected invalid "
                     f"input with {request_type=}"
                 )
 
@@ -8051,9 +8047,9 @@ class ConfigVerifier:
         )
 
     ####################################################################
-    # build_pending_sync_only_scenarios
+    # build_pend_sync_only_scenario
     ####################################################################
-    def build_pending_sync_only_scenarios(
+    def build_pend_sync_only_scenario(
         self, pending_msg_count: int, pending_wait_tf: bool, pending_sync_tf: bool
     ) -> None:
         """Return a list of ConfigCmd items for a create.
@@ -8066,7 +8062,7 @@ class ConfigVerifier:
 
         Notes:
             There are two test cases dealing with the pending flags:
-            test_pending_sans_sync_scenario:
+            test_pend_sans_sync_scenario:
                 this will test combinations for:
                     pending_request: True, False
                     pending_msg: count of 0, 1, 2
@@ -8077,7 +8073,7 @@ class ConfigVerifier:
                     smart_wait
                     smart_resume
 
-            test_pending_sync_only_scenario:
+            test_pend_sync_only_scenario:
                 this will test combinations for:
                     pending_request: True
                     pending_msg: count of 0, 1, 2
@@ -8127,7 +8123,7 @@ class ConfigVerifier:
             sender_names=remote_names,
             receiver_names=pending_names,
             num_msgs=max(1, pending_msg_count),
-            text="build_pending_sync_only_scenarios",
+            text="build_pend_sync_only_scenario",
         )
 
         for idx in range(pending_msg_count):
@@ -10454,11 +10450,11 @@ class ConfigVerifier:
                 )
             )
             if not single_request:
-                ############################################################
+                ########################################################
                 # before: lock
                 # action: RecvMsg
                 # after: lock|recv_0_v|lock
-                ############################################################
+                ########################################################
                 lm.start_request(recv_0_name)
 
         else:  # must be wait
@@ -10472,11 +10468,11 @@ class ConfigVerifier:
                 )
             )
             if not single_request:
-                ############################################################
+                ########################################################
                 # before: lock
                 # action: Wait
                 # after: lock|wait_0_v|lock
-                ############################################################
+                ########################################################
                 lm.start_request(wait_0_name)
 
         ################################################################
@@ -17962,16 +17958,6 @@ class ConfigVerifier:
 
         self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="create_f1_thread")
 
-        # self.monitor_event.set()
-        #
-        # self.log_test_msg(
-        #     f"{cmd_runner=} ({self.group_name}) create_f1_thread waiting "
-        #     f"for monitor"
-        # )
-        # self.cmd_waiting_event_items[cmd_runner].wait()
-        # with self.ops_lock:
-        #     del self.cmd_waiting_event_items[cmd_runner]
-
         self.log_test_msg(f"create_f1_thread exiting: {cmd_runner=}, " f"{name=}")
 
     ####################################################################
@@ -19887,7 +19873,6 @@ class ConfigVerifier:
 
         """
         self.expected_registered[target].is_alive = True
-        self.log_test_msg(f"SBT2 set is_alive to True")
 
         ################################################################
         # next step is to add entry to pair array
@@ -19895,26 +19880,6 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         if pe[PE.current_request].req_type == st.ReqType.Smart_start:
             pe[PE.num_targets_remaining] -= 1
-
-    ####################################################################
-    # handle_set_state_start_to_alive
-    ####################################################################
-    # def handle_set_state_start_to_alive(self, cmd_runner: str, target: str) -> None:
-    #     """Determine next step for set state.
-    #
-    #     Args:
-    #         cmd_runner: thread name doing the state change
-    #         target: thread name getting its state changed
-    #
-    #     """
-    #     self.expected_registered[target].is_alive = True
-    #     self.config_ver.log_test_msg(f"SBT3 set is_alive to True")
-    #
-    #     ################################################################
-    #     # determine next step
-    #     ################################################################
-    #     pe = self.pending_events[cmd_runner]
-    #     pe[PE.num_targets_remaining] -= 1
 
     ####################################################################
     # handle_set_state_reg_to_unregistering
@@ -19956,7 +19921,6 @@ class ConfigVerifier:
 
         """
         self.expected_registered[target].is_alive = False
-        self.log_test_msg(f"SBT4 set is_alive to False")
 
     ####################################################################
     # handle_set_state_alive_to_stop
@@ -20434,7 +20398,7 @@ class ConfigVerifier:
             self.recently_stopped[stopped_name] = log_idx
             if stopped_name in self.expected_registered:
                 self.expected_registered[stopped_name].is_alive = False
-                self.log_test_msg(f"SBT5 set is_alive to False")
+
             self.stopped_event_items[cmd_runner].targets.remove(stopped_name)
             if not self.stopped_event_items[cmd_runner].targets:
                 self.stopped_event_items[cmd_runner].client_event.set()
@@ -21310,8 +21274,8 @@ class ConfigVerifier:
                 time.sleep(0.05)
 
         self.monitor_event.set()
-        # we can not use wait_for_monitor because stop uses stopped_event_items
-        # self.wait_for_monitor(cmd_runner=cmd_runner, rtn_name="stop_thread")
+        # we can not use wait_for_monitor because stop uses
+        # stopped_event_items
 
         self.log_test_msg(
             f"{cmd_runner=} ({self.group_name}) stop_thread waiting for monitor"
@@ -32800,7 +32764,7 @@ class TestSmartThreadErrors:
                     f"{MockRequestLoop.mock_exp_pk_remotes}."
                 )
 
-                logger.debug(f'{" "*21}{exp_error_msg}')
+                logger.debug(f'{" " * 21}{exp_error_msg}')
             else:
                 raise IncorrectActionSpecified(
                     f"test_handle_found_pk_remotes_errors received "
@@ -33289,9 +33253,9 @@ class TestSmartThreadErrors:
 
         exp_error_msg = (
             r"SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
-            f"error while processing request smart_join. "
+            "error while processing request smart_join. "
             r"The set of targets \['alpha'\] includes alpha which is not "
-            f"permitted for request smart_join."
+            "permitted for request smart_join."
         )
 
         logger.debug(exp_error_msg)
@@ -33984,7 +33948,7 @@ class TestSmartThreadRtns:
 
             f1_exp_error_msg = (
                 "SmartThread get_current_smart_thread raising SmartThreadNotFound. "
-                f"Unable to find the current smart thread for group_name='test1'."
+                "Unable to find the current smart thread for group_name='test1'."
             )
 
             logger.debug(f1_exp_error_msg)
@@ -34010,7 +33974,7 @@ class TestSmartThreadRtns:
 
         exp_error_msg = (
             "SmartThread get_current_smart_thread raising SmartThreadNotFound. "
-            f"Unable to find the current smart thread for group_name='test1'."
+            "Unable to find the current smart thread for group_name='test1'."
         )
 
         logger.debug(exp_error_msg)
@@ -34253,7 +34217,7 @@ class TestSmartThreadConfigScenarios:
 
             logger.debug(f"f1 exit: {smart_thread.name=}")
 
-        logger.debug(f"mainline entry")
+        logger.debug("mainline entry")
         alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
         alpha_smart_thread.smart_unreg()
 
@@ -34284,7 +34248,7 @@ class TestSmartThreadConfigScenarios:
 
         alpha_smart_thread.smart_unreg()
 
-        logger.debug(f"mainline exit")
+        logger.debug("mainline exit")
 
     ####################################################################
     # test_config_build_scenarios
@@ -34750,11 +34714,11 @@ class TestSmartBasicScenarios:
         )
 
     ####################################################################
-    # test_pending_sans_sync_scenario
+    # test_pend_sans_sync_scenario
     ####################################################################
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
-    def test_pending_sans_sync_scenario(
+    def test_pend_sans_sync_scenario(
         self,
         pending_msg_count_arg: int,
         pending_wait_tf_arg: bool,
@@ -34788,7 +34752,7 @@ class TestSmartBasicScenarios:
 
                 sdparms.append(
                     ScenarioDriverParms(
-                        scenario_builder=ConfigVerifier.build_pending_sans_sync_scenario,
+                        scenario_builder=ConfigVerifier.build_pend_sans_sync_scenario,
                         scenario_builder_args=args_for_scenario_builder,
                         commander_config=AppConfig(config_idx % len(AppConfig) + 1),
                         commander_name=f"alpha{config_idx}",
@@ -34802,10 +34766,10 @@ class TestSmartBasicScenarios:
         )
 
     ####################################################################
-    # test_pending_sync_only_scenario
+    # test_pend_sync_only_scenario
     ####################################################################
     @pytest.mark.parametrize("pending_sync_tf_arg", [True, False])
-    def test_pending_sync_only_scenario(
+    def test_pend_sync_only_scenario(
         self,
         pending_sync_tf_arg: bool,
         caplog: pytest.LogCaptureFixture,
@@ -34830,7 +34794,7 @@ class TestSmartBasicScenarios:
 
                 sdparms.append(
                     ScenarioDriverParms(
-                        scenario_builder=ConfigVerifier.build_pending_sync_only_scenarios,
+                        scenario_builder=ConfigVerifier.build_pend_sync_only_scenario,
                         scenario_builder_args=args_for_scenario_builder,
                         commander_config=AppConfig(config_idx % len(AppConfig) + 1),
                         commander_name=f"alpha{config_idx}",
