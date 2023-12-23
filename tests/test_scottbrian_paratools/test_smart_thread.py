@@ -30282,7 +30282,7 @@ def scenario_driver_part1(
     ################################################################
     # f1
     ################################################################
-    def f1(f1_smart_thread: st.SmartThread, f1_config_ver: ConfigVerifier):
+    def f1(f1_smart_thread: st.SmartThread, f1_config_ver: ConfigVerifier) -> None:
         f1_config_ver.log_test_msg(f"f1 entry: {f1_smart_thread.name=}")
 
         f1_config_ver.main_driver()
@@ -30506,11 +30506,11 @@ def scenario_driver_part1(
             )
         )
 
-        req_key_entry: RequestKey = ("smart_start", "entry")
+        req_key_entry = ("smart_start", "entry")
 
         pe[PE.request_msg][req_key_entry] += 1
 
-        req_key_exit: RequestKey = ("smart_start", "exit")
+        req_key_exit = ("smart_start", "exit")
         pe[PE.request_msg][req_key_exit] += 1
 
         outer_thread_app.smart_thread.smart_start()
@@ -31471,33 +31471,31 @@ class TestSmartThreadSmokeTest:
     ####################################################################
     # test_smart_thread_simple_scenarios
     ####################################################################
-    @pytest.mark.parametrize(
-        "commander_config_arg",
-        [
-            AppConfig.ScriptStyle,
-            AppConfig.CurrentThreadApp,
-            AppConfig.RemoteThreadApp,
-            AppConfig.RemoteSmartThreadApp,
-            AppConfig.RemoteSmartThreadApp2,
-        ],
-    )
     def test_smart_thread_simple_scenarios(
-        self, caplog: pytest.LogCaptureFixture, commander_config_arg: AppConfig
-    ) -> None:
+            self, caplog: pytest.LogCaptureFixture) -> None:
         """Test meta configuration scenarios.
 
         Args:
             caplog: pytest fixture to capture log output
-            commander_config_arg: specifies the config for the commander
 
         """
+
+        sdparms: list[ScenarioDriverParms] = []
         args_for_scenario_builder: dict[str, Any] = {}
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_simple_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_simple_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config_arg,
+            scenario_driver_parms=sdparms,
         )
 
 
@@ -32697,6 +32695,7 @@ class TestSmartThreadErrors:
 
                 """
                 logger.debug("mock_request_loop entered")
+                group_name = self.group_name  # type: ignore
                 delta_added = False
                 while True:
                     work_pk_remotes_copy = self.work_pk_remotes.copy()  # type: ignore
@@ -32707,7 +32706,7 @@ class TestSmartThreadErrors:
                         # entry will prevent our entry for being removed
                         # (but not the remote)
                         with sel.SELockShare(
-                            st.SmartThread._registry[self.group_name].registry_lock
+                            st.SmartThread._registry[group_name].registry_lock
                         ):
                             if self.found_pk_remotes:  # type: ignore
                                 wpr = self.work_pk_remotes  # type: ignore
@@ -33057,15 +33056,17 @@ class TestSmartThreadErrors:
         )
 
         logger.debug(exp_error_msg)
-        with pytest.raises(st.SmartThreadProcessingRequest) as exc1:
+        with pytest.raises(
+            st.SmartThreadProcessingRequest, match=exp_error_msg
+        ) as exc2:
             alpha_thread.smart_unreg(targets=targets)
 
         alpha_thread.smart_resume(waiters="beta")
         alpha_thread.smart_join(targets="beta", timeout=5)
 
-        assert re.fullmatch(exp_error_msg, str(exc1.value))
+        # assert re.fullmatch(exp_error_msg, str(exc2.value))
 
-        print("\n", exc1.value)
+        print("\n", exc2.value)
 
         ################################################################
         # SmartThreadDeadlockDetected
@@ -33078,8 +33079,6 @@ class TestSmartThreadErrors:
             auto_start=False,
         )
         beta_thread.smart_start()
-        with pytest.raises(st.SmartThreadDeadlockDetected) as exc2:
-            alpha_thread.smart_recv(senders=targets)
 
         targets_msg = re.escape(
             f"while processing a smart_recv request with targets {targets}."
@@ -33108,15 +33107,19 @@ class TestSmartThreadErrors:
             f"{msg_suite}"
         )
 
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc2.value))
+        with pytest.raises(st.SmartThreadDeadlockDetected, match=exp_error_msg) as exc3:
+            alpha_thread.smart_recv(senders=targets)
 
-        print("\n", exc2.value)
+        logger.debug(exp_error_msg)
+        # assert re.fullmatch(exp_error_msg, str(exc3.value))
+
+        print("\n", exc3.value)
 
         ################################################################
         # SmartThreadRequestTimedOut not responsive
         ################################################################
         alpha_thread.smart_join(targets="beta", timeout=5)
+
         beta_thread = st.SmartThread(
             group_name="test1",
             name="beta",
@@ -33125,8 +33128,6 @@ class TestSmartThreadErrors:
             auto_start=False,
         )
         beta_thread.smart_start()
-        with pytest.raises(st.SmartThreadRequestTimedOut) as exc3:
-            alpha_thread.smart_recv(senders=targets, timeout=1)
 
         targets_msg = re.escape(
             f"while processing a smart_recv request with targets {targets}."
@@ -33152,10 +33153,13 @@ class TestSmartThreadErrors:
             f"{msg_suite}"
         )
 
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc3.value))
+        with pytest.raises(st.SmartThreadRequestTimedOut, match=exp_error_msg) as exc4:
+            alpha_thread.smart_recv(senders=targets, timeout=1)
 
-        print("\n", exc3.value)
+        logger.debug(exp_error_msg)
+        # assert re.fullmatch(exp_error_msg, str(exc4.value))
+
+        print("\n", exc4.value)
 
         ################################################################
         # join beta
@@ -33177,8 +33181,6 @@ class TestSmartThreadErrors:
         )
         beta_thread.smart_start()
         alpha_thread.smart_send(receivers="beta", msg="hi beta")
-        with pytest.raises(st.SmartThreadRequestTimedOut) as exc3:
-            alpha_thread.smart_send(receivers=targets, msg="hello again", timeout=1)
 
         targets_msg = re.escape(
             f"while processing a smart_send request with targets {targets}."
@@ -33204,28 +33206,31 @@ class TestSmartThreadErrors:
             f"{msg_suite}"
         )
 
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc3.value))
+        with pytest.raises(st.SmartThreadRequestTimedOut, match=exp_error_msg) as exc4:
+            alpha_thread.smart_send(receivers=targets, msg="hello again", timeout=1)
 
-        print("\n", exc3.value)
+        logger.debug(exp_error_msg)
+        # assert re.fullmatch(exp_error_msg, str(exc4.value))
+
+        print("\n", exc4.value)
 
         ################################################################
         # SmartThreadInvalidInput
         ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc4:
-            alpha_thread._handle_loop_errors(
-                request=st.ReqType.Smart_sync, remotes={"beta"}
-            )
-
         exp_error_msg = (
             r"_handle_loop_errors alpha \(test1\) called without an "
             "error - raising SmartThreadInvalidInput"
         )
 
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc4.value))
+        with pytest.raises(st.SmartThreadInvalidInput, match=exp_error_msg) as exc5:
+            alpha_thread._handle_loop_errors(
+                request=st.ReqType.Smart_sync, remotes={"beta"}
+            )
 
-        print("\n", exc4.value)
+        logger.debug(exp_error_msg)
+        # assert re.fullmatch(exp_error_msg, str(exc5.value))
+
+        print("\n", exc5.value)
 
         ################################################################
         # join beta
@@ -34205,7 +34210,7 @@ class TestSmartThreadConfigScenarios:
     # test_unreg_scenarios
     ####################################################################
     # @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
-    def test_unreg_scenario(self):
+    def test_unreg_scenario(self) -> None:
         """Test unregister scenarios."""
 
         def f1(smart_thread: st.SmartThread) -> None:

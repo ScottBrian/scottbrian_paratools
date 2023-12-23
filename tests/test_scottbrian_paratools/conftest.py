@@ -27,17 +27,19 @@ from scottbrian_paratools.smart_thread import SmartThread
 ########################################################################
 # logging
 ########################################################################
-# logging.basicConfig(filename='ThreadComm.log',
-#                     filemode='w',
-#                     level=logging.DEBUG,
-#                     format='%(asctime)s '
-#                            '%(msecs)03d '
-#                            '[%(levelname)8s] '
-#                            '%(threadName)s '
-#                            '%(filename)s:'
-#                            '%(funcName)s:'
-#                            '%(lineno)d '
-#                            '%(message)s')
+logging.basicConfig(
+    filename="ThreadComm.log",
+    filemode="w",
+    level=logging.DEBUG,
+    format="%(asctime)s "
+    "%(msecs)03d "
+    "[%(levelname)8s] "
+    "%(threadName)s "
+    "%(filename)s:"
+    "%(funcName)s:"
+    "%(lineno)d "
+    "%(message)s",
+)
 
 logger = logging.getLogger(__name__)
 
