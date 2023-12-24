@@ -482,7 +482,7 @@ class LockMgr:
     ####################################################################
     # get_lock
     ####################################################################
-    def get_lock(self, alt_frame_num: int = 1):
+    def get_lock(self, alt_frame_num: int = 1) -> None:
         """Get the lock and verify the lock positions.
 
         Args:
@@ -520,7 +520,7 @@ class LockMgr:
     ####################################################################
     def start_request(
         self, requestor_name: str, trailing_lock: bool = True, alt_frame_num: int = 1
-    ):
+    ) -> None:
         """Append a requestor and verify lock positions.
 
         Args:
@@ -548,7 +548,7 @@ class LockMgr:
         requestor_complete: bool = False,
         free_all: bool = False,
         alt_frame_num: int = 1,
-    ):
+    ) -> None:
         """Drop the lock and verify positions.
 
         Args:
@@ -582,7 +582,7 @@ class LockMgr:
     ####################################################################
     # complete_request
     ####################################################################
-    def complete_request(self, free_all: bool = False, alt_frame_num: int = 1):
+    def complete_request(self, free_all: bool = False, alt_frame_num: int = 1) -> None:
         """Drop the lock and verify positions.
 
         Args:
@@ -598,7 +598,7 @@ class LockMgr:
     ####################################################################
     def advance_request(
         self, num_times: int = 1, trailing_lock: bool = True, alt_frame_num: int = 1
-    ):
+    ) -> None:
         """Drop the lock, requeue the requestor, verify positions.
 
         Args:
@@ -614,7 +614,7 @@ class LockMgr:
     ####################################################################
     # advance_request
     ####################################################################
-    def swap_requestors(self, alt_frame_num: int = 1):
+    def swap_requestors(self, alt_frame_num: int = 1) -> None:
         """Swap the requests lock positions.
 
         Args:
@@ -5309,7 +5309,7 @@ class MockGetTargetState:
             exclusive
         """
         group_name: str = self.group_name  # type: ignore
-        if pk_remote.remote not in self.registry:
+        if pk_remote.remote not in self.registry:  # type: ignore
             if pk_remote.create_time != 0.0:
                 ret_state = st.ThreadState.Stopped
             else:
@@ -5317,16 +5317,17 @@ class MockGetTargetState:
 
         else:
             if (
-                not self.registry[pk_remote.remote].thread.is_alive()
-                and self.registry[pk_remote.remote].st_state == st.ThreadState.Alive
+                not self.registry[pk_remote.remote].thread.is_alive()  # type: ignore
+                and self.registry[pk_remote.remote].st_state  # type: ignore
+                == st.ThreadState.Alive
             ):
                 ret_state = st.ThreadState.Stopped
 
             elif (
-                pk_remote.pair_key in self.pair_array
+                pk_remote.pair_key in self.pair_array  # type: ignore
                 and pk_remote.remote
-                in self.pair_array[pk_remote.pair_key].status_blocks
-                and self.pair_array[pk_remote.pair_key]
+                in self.pair_array[pk_remote.pair_key].status_blocks  # type: ignore
+                and self.pair_array[pk_remote.pair_key]  # type: ignore
                 .status_blocks[pk_remote.remote]
                 .create_time
                 != pk_remote.create_time
@@ -5334,13 +5335,14 @@ class MockGetTargetState:
                 ret_state = st.ThreadState.Stopped
 
             elif (
-                not self.registry[pk_remote.remote].thread.is_alive()
-                and self.registry[pk_remote.remote].st_state == st.ThreadState.Alive
+                not self.registry[pk_remote.remote].thread.is_alive()  # type: ignore
+                and self.registry[pk_remote.remote].st_state  # type: ignore
+                == st.ThreadState.Alive
             ):
                 ret_state = st.ThreadState.Stopped
 
             else:
-                ret_state = self.registry[pk_remote.remote].st_state
+                ret_state = self.registry[pk_remote.remote].st_state  # type: ignore
 
         name = self.name  # type: ignore
         if name in MockGetTargetState.targets[group_name]:
@@ -6078,7 +6080,7 @@ class ConfigVerifier:
         num_reg: int,
         num_alive: int,
         num_stopped: int,
-    ):
+    ) -> None:
         """Test get_smart_thread_names scenarios.
 
         Args:
@@ -17903,11 +17905,11 @@ class ConfigVerifier:
                     exp_resumers=set(),
                 )
             )
-            req_key_entry: RequestKey = ("smart_start", "entry")
+            req_key_entry = ("smart_start", "entry")
 
             pe[PE.request_msg][req_key_entry] += 1
 
-            req_key_exit: RequestKey = ("smart_start", "exit")
+            req_key_exit = ("smart_start", "exit")
 
             pe[PE.request_msg][req_key_exit] += 1
 
@@ -18510,12 +18512,12 @@ class ConfigVerifier:
 
         elif deadlock_remotes:
             if deadlock_or_timeout:
-                expected_exceptions = (
+                expected_exceptions: tuple[Any, ...] = (
                     st.SmartThreadDeadlockDetected,
                     st.SmartThreadRequestTimedOut,
                 )
             else:
-                expected_exceptions = st.SmartThreadDeadlockDetected
+                expected_exceptions = (st.SmartThreadDeadlockDetected,)
             with pytest.raises(expected_exceptions):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_recv(
@@ -20833,12 +20835,12 @@ class ConfigVerifier:
 
         elif deadlock_remotes:
             if deadlock_or_timeout:
-                expected_exceptions = (
+                expected_exceptions: tuple[Any, ...] = (
                     st.SmartThreadDeadlockDetected,
                     st.SmartThreadRequestTimedOut,
                 )
             else:
-                expected_exceptions = st.SmartThreadDeadlockDetected
+                expected_exceptions = (st.SmartThreadDeadlockDetected,)
             with pytest.raises(expected_exceptions):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
@@ -21590,7 +21592,7 @@ class ConfigVerifier:
                         and item.st_state == st.ThreadState.Stopped
                     )
                 ):
-                    rem_key: RemRegKey = (key, request)
+                    rem_key = (key, request)
                     pe[PE.rem_reg_msg][rem_key] += 1
                     rem_targets.append(key)
 
@@ -30179,37 +30181,16 @@ class ScenarioDriverParms:
 
 def scenario_driver(
     caplog_to_use: pytest.LogCaptureFixture,
-    scenario_builder: Callable[..., None] = ConfigVerifier.build_simple_scenario,
-    scenario_builder_args: dict[str, Any] = None,
-    commander_config: AppConfig = AppConfig.ScriptStyle,
-    commander_name: str = "alpha",
-    group_name: str = "test1",
-    scenario_driver_parms: Optional[list[ScenarioDriverParms]] = None,
+    scenario_driver_parms: list[ScenarioDriverParms],
 ) -> None:
     """Build and run a scenario.
 
     Args:
-        scenario_builder: the ConfigVerifier builder method to call
-        scenario_builder_args: the args to pass to the builder
         caplog_to_use: the capsys to capture log messages
-        commander_config: specifies how the commander will run
-        commander_name: name of commander thread
-        group_name: group_name to use
         scenario_driver_parms: args for scenario_driver_part_1
 
 
     """
-    if scenario_driver_parms is None:
-        scenario_driver_parms = [
-            ScenarioDriverParms(
-                scenario_builder=scenario_builder,
-                scenario_builder_args=scenario_builder_args,
-                commander_config=commander_config,
-                commander_name=commander_name,
-                group_name=group_name,
-            )
-        ]
-
     log_ver = LogVer(log_name=__name__)
 
     config_vers: list[ConfigVerifier] = []
@@ -30229,9 +30210,8 @@ def scenario_driver(
             config_ver=config_ver,
             scenario_builder=sdparm.scenario_builder,
             scenario_builder_args=sdparm.scenario_builder_args,
-            caplog_to_use=caplog_to_use,
             log_ver=log_ver,
-            commander_config=sdparm.commander_config,
+            cmder_config=sdparm.commander_config,
             commander_name=sdparm.commander_name,
             group_name=sdparm.group_name,
         )
@@ -30244,11 +30224,6 @@ def scenario_driver(
             AppConfig.RemoteSmartThreadApp2,
         ]:
             config_ver.all_threads[config_ver.commander_name].thread.join()
-        # else:
-        #     config_ver.all_threads[config_ver.commander_name].smart_unreg()
-
-    # for config_ver in config_vers:
-    #     scenario_driver_part2(config_ver=config_ver)
 
     ################################################################
     # check log results
@@ -30265,17 +30240,21 @@ def scenario_driver_part1(
     config_ver: ConfigVerifier,
     scenario_builder: Callable[..., None],
     scenario_builder_args: dict[str, Any],
-    caplog_to_use: pytest.LogCaptureFixture,
     log_ver: LogVer,
-    commander_config: AppConfig = AppConfig.ScriptStyle,
-    commander_name: str = "alpha",
-    group_name: str = "test1",
+    cmder_config: AppConfig,
+    commander_name: str,
+    group_name: str,
 ) -> None:
     """Build and run a scenario.
 
     Args:
         config_ver: the ConfigVerifier
-        caplog_to_use: the capsys to capture log messages
+        scenario_builder: the ConfigVerifier builder method to call
+        scenario_builder_args: the args to pass to the builder
+        log_ver: log verification object
+        cmder_config: specifies how the commander will run
+        commander_name: name of commander thread
+        group_name: group_name to use
 
     """
 
@@ -30303,7 +30282,7 @@ def scenario_driver_part1(
     config_ver.log_test_msg(
         f"scenario_driver_part1 entry: {commander_name=} "
         f"{group_name=} {scenario_builder=} "
-        f"{scenario_builder_args=} {commander_config=}"
+        f"{scenario_builder_args=} {cmder_config=}"
     )
 
     config_ver.unregistered_names -= {commander_name}
@@ -30395,7 +30374,7 @@ def scenario_driver_part1(
     ################################################################
     config_ver.monitor_pause = True
     outer_thread_app: Union[OuterThreadApp, OuterSmartThreadApp, OuterSmartThreadApp2]
-    if commander_config == AppConfig.ScriptStyle:
+    if cmder_config == AppConfig.ScriptStyle:
         commander_thread = st.SmartThread(group_name=group_name, name=commander_name)
 
         initialize_config_ver(
@@ -30408,7 +30387,7 @@ def scenario_driver_part1(
         )
         config_ver.monitor_pause = False
         config_ver.main_driver()
-    elif commander_config == AppConfig.F1Rtn:
+    elif cmder_config == AppConfig.F1Rtn:
         f1_thread = st.SmartThread(
             group_name=group_name,
             name=commander_name,
@@ -30457,7 +30436,7 @@ def scenario_driver_part1(
         f1_thread.smart_start()
         # if not skip_join:
         #     outer_thread_app.join()
-    elif commander_config == AppConfig.CurrentThreadApp:
+    elif cmder_config == AppConfig.CurrentThreadApp:
         cmd_current_app = CommanderCurrentApp(
             config_ver=config_ver, name=commander_name, max_msgs=10
         )
@@ -30472,7 +30451,7 @@ def scenario_driver_part1(
         )
         config_ver.monitor_pause = False
         cmd_current_app.run()
-    elif commander_config == AppConfig.RemoteThreadApp:
+    elif cmder_config == AppConfig.RemoteThreadApp:
         outer_thread_app = OuterThreadApp(
             config_ver=config_ver, name=commander_name, max_msgs=10
         )
@@ -30516,7 +30495,7 @@ def scenario_driver_part1(
         outer_thread_app.smart_thread.smart_start()
         # if not skip_join:
         #     outer_thread_app.join()
-    elif commander_config == AppConfig.RemoteSmartThreadApp:
+    elif cmder_config == AppConfig.RemoteSmartThreadApp:
         outer_thread_app = OuterSmartThreadApp(
             config_ver=config_ver, name=commander_name, max_msgs=10
         )
@@ -30558,7 +30537,7 @@ def scenario_driver_part1(
 
         outer_thread_app.smart_start(commander_name)
         # threading.Thread.join(outer_thread_app)
-    elif commander_config == AppConfig.RemoteSmartThreadApp2:
+    elif cmder_config == AppConfig.RemoteSmartThreadApp2:
         outer_thread_app = OuterSmartThreadApp2(
             config_ver=config_ver, name=commander_name, max_msgs=10
         )
@@ -30601,14 +30580,12 @@ def scenario_driver_part1(
         outer_thread_app.smart_start(commander_name)
         # threading.Thread.join(outer_thread_app)
     else:
-        raise UnrecognizedCmd(
-            "scenario_driver does not recognize " f"{commander_config=}"
-        )
+        raise UnrecognizedCmd(f"scenario_driver does not recognize {cmder_config=}")
 
     config_ver.log_test_msg(
         f"scenario_driver_part1 exit: {commander_name=} "
         f"{group_name=} {scenario_builder=} "
-        f"{scenario_builder_args=} {commander_config=}"
+        f"{scenario_builder_args=} {cmder_config=}"
     )
 
 
@@ -31472,7 +31449,8 @@ class TestSmartThreadSmokeTest:
     # test_smart_thread_simple_scenarios
     ####################################################################
     def test_smart_thread_simple_scenarios(
-            self, caplog: pytest.LogCaptureFixture) -> None:
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Test meta configuration scenarios.
 
         Args:
@@ -34901,10 +34879,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_backout_sync_local_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_backout_sync_local_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -34919,10 +34908,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_sync_delay_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_delay_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -34937,10 +34937,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_sync_delay2_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_delay2_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -34956,10 +34967,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_sync_create_time_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_create_time_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -34981,10 +35003,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_send_unreg_receiver_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_send_unreg_receiver_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -35006,10 +35039,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_join_simple_timeout_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_join_simple_timeout_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -35031,10 +35075,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_wait_simple_deadlock_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_wait_simple_deadlock_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -35054,10 +35109,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_sync_unreg_simple_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_unreg_simple_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
@@ -35077,10 +35143,21 @@ class TestSmartBasicScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
+        sdparms: list[ScenarioDriverParms] = []
+        for config_idx in range(len(AppConfig)):
+            sdparms.append(
+                ScenarioDriverParms(
+                    scenario_builder=ConfigVerifier.build_sync_init_delay_scenario,
+                    scenario_builder_args=args_for_scenario_builder,
+                    commander_config=AppConfig(config_idx % len(AppConfig) + 1),
+                    commander_name=f"alpha{config_idx}",
+                    group_name=f"test{config_idx}",
+                )
+            )
+
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_init_delay_scenario,
-            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
+            scenario_driver_parms=sdparms,
         )
 
     ####################################################################
