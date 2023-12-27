@@ -20371,7 +20371,7 @@ class ConfigVerifier:
             f"{start_time=}"
         )
         self.monitor_event.set()
-        if self.cmd_waiting_event_items[cmd_runner].wait(timeout=60):
+        if self.cmd_waiting_event_items[cmd_runner].wait(timeout=120):
             with self.ops_lock:
                 del self.cmd_waiting_event_items[cmd_runner]
         else:

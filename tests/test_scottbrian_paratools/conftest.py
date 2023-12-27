@@ -27,19 +27,19 @@ from scottbrian_paratools.smart_thread import SmartThread
 ########################################################################
 # logging
 ########################################################################
-logging.basicConfig(
-    filename="ThreadComm.log",
-    filemode="w",
-    level=logging.DEBUG,
-    format="%(asctime)s "
-    "%(msecs)03d "
-    "[%(levelname)8s] "
-    "%(threadName)s "
-    "%(filename)s:"
-    "%(funcName)s:"
-    "%(lineno)d "
-    "%(message)s",
-)
+# logging.basicConfig(
+#     filename="ThreadComm.log",
+#     filemode="w",
+#     level=logging.DEBUG,
+#     format="%(asctime)s "
+#     "%(msecs)03d "
+#     "[%(levelname)8s] "
+#     "%(threadName)s "
+#     "%(filename)s:"
+#     "%(funcName)s:"
+#     "%(lineno)d "
+#     "%(message)s",
+# )
 
 logger = logging.getLogger(__name__)
 
@@ -123,12 +123,13 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
     exc_hook = ExcHook()
 
     def mock_threading_excepthook(args):
-        # exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
-        #                f'{args.exc_value}, {args.exc_traceback},'
-        #                f' {args.thread}')
         exc_err_msg = (
-            f"SmartEvent excepthook: {args.exc_type}, " f"{args.exc_traceback}"
+            f"SmartThread excepthook: {args.exc_type=}, "
+            f"{args.exc_value=}, {args.exc_traceback=},"
+            f" {args.thread=}"
         )
+        print("SBT printing tb")
+        traceback.print_tb(args.exc_traceback)
         current_thread = threading.current_thread()
         logging.exception(f"exception caught for {current_thread}")
         logger.debug(f"excepthook current thread is {current_thread}")
