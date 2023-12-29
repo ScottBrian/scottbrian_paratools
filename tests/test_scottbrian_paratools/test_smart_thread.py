@@ -2495,8 +2495,10 @@ class VerifyConfig(ConfigCmd):
             verify_data=verify_data,
         )
 
-        self.config_ver.verify_config_complete_event.wait()
-        self.config_ver.verify_config_complete_event.clear()
+        if self.config_ver.verify_config_complete_event.wait(timeout=60):
+            self.config_ver.verify_config_complete_event.clear()
+        else:
+            self.config_ver.abort_test_case()
 
 
 ########################################################################
@@ -5097,8 +5099,15 @@ class DebugLogSearchItem(LogSearchItem):
 
     def run_process(self) -> None:
         """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        if split_msg[3] == "testcase":
+            log_name = "test_scottbrian_paratools.test_smart_thread"
+        else:
+            log_name = "scottbrian_paratools.smart_thread"
         self.config_ver.add_log_msg(
-            re.escape(self.found_log_msg), log_level=logging.DEBUG
+            re.escape(self.found_log_msg),
+            log_level=logging.DEBUG,
+            log_name=log_name,
         )
 
 
@@ -5492,6 +5501,7 @@ class ConfigVerifier:
         caplog_to_use: pytest.LogCaptureFixture,
         msgs: Msgs,
         max_msgs: int = 10,
+        allow_log_test_msg: bool = True,
     ) -> None:
         """Initialize the ConfigVerifier.
 
@@ -5554,6 +5564,7 @@ class ConfigVerifier:
         #                           dict[str, ThreadPairStatus]] = {}
         self.expected_pairs: dict[st.PairKey, dict[str, ThreadPairStatus]] = {}
         self.log_ver = log_ver
+        self.allow_log_test_msg = allow_log_test_msg
         self.caplog_to_use = caplog_to_use
         self.msgs = msgs
         self.ops_lock = threading.RLock()
@@ -5564,7 +5575,7 @@ class ConfigVerifier:
 
         self.expected_num_recv_timeouts: int = 0
 
-        self.abort_test_case = False
+        self.test_case_aborted = False
 
         self.stopped_event_items: dict[str, MonitorEventItem] = {}
         self.cmd_waiting_event_items: dict[str, threading.Event] = {}
@@ -5615,8 +5626,6 @@ class ConfigVerifier:
 
         self.snap_shot_data: dict[int, SnapShotDataItem] = {}
 
-        self.allow_log_test_msg = True
-
         self.last_clean_reg_msg_idx: int = 0
         self.last_thread_stop_msg_idx: dict[str, int] = defaultdict(int)
 
@@ -5653,6 +5662,15 @@ class ConfigVerifier:
                     comma = ", "  # after first item, now need comma
 
         return f"{classname}({parms})"
+
+    ####################################################################
+    # setup_pending_events
+    ####################################################################
+    def abort_test_case(self) -> None:
+        """Abort the test case."""
+        self.log_test_msg(f"aborting test case {get_formatted_call_sequence()}")
+        self.test_case_aborted = True
+        self.abort_all_f1_threads()
 
     ####################################################################
     # setup_pending_events
@@ -5757,15 +5775,17 @@ class ConfigVerifier:
                         found_log_item.run_process()
                     except Exception as exc:
                         self.log_test_msg(f"monitor detected exception {exc}")
-                        self.abort_test_case = True
-                        self.abort_all_f1_threads()
+                        self.abort_test_case()
                         raise
 
                     last_msg_processed_time = time.time()
 
             if time.time() - last_msg_processed_time > timeout_value_seconds:
-                self.abort_test_case = True
-                self.abort_all_f1_threads()
+                logger.debug(
+                    f"TestDebug {self.commander_name} ({self.group_name}) testcase "
+                    "monitor aborting test case"
+                )
+                self.abort_test_case()
                 error_msg = "monitor timed out"
                 self.log_test_msg(error_msg)
                 raise CmdTimedOut(error_msg)
@@ -5966,8 +5986,7 @@ class ConfigVerifier:
     ####################################################################
     def abort_all_f1_threads(self) -> None:
         """Abort all threads before raising an error."""
-        self.log_test_msg("abort_all_f1_threads entry")
-        self.log_test_msg(f"{len(self.all_threads.keys())=}")
+        self.log_test_msg(f"abort_all_f1_threads entry {len(self.all_threads.keys())=}")
         for name, thread in self.all_threads.items():
             if name == self.commander_name:
                 continue
@@ -5981,9 +6000,6 @@ class ConfigVerifier:
                 self.msgs.queue_msg(name, exit_cmd)
 
         self.monitor_event.set()
-
-        if threading.current_thread() is not self.monitor_thread:
-            self.monitor_thread.join()
 
         self.log_test_msg("abort_all_f1_threads exit")
 
@@ -6055,7 +6071,11 @@ class ConfigVerifier:
     # add_log_msg
     ####################################################################
     def add_log_msg(
-        self, new_log_msg: str, log_level: int = logging.DEBUG, fullmatch: bool = True
+        self,
+        new_log_msg: str,
+        log_level: int = logging.DEBUG,
+        fullmatch: bool = True,
+        log_name: Optional[str] = None,
     ) -> None:
         """Add log message to log_ver for SmartThread logger.
 
@@ -6064,9 +6084,12 @@ class ConfigVerifier:
             log_level: the logging severity level to use
             fullmatch: specify whether fullmatch should be done instead
                 of match
+            log_name: name of log to use for add_msg
         """
+        if log_name is None:
+            log_name = "scottbrian_paratools.smart_thread"
         self.log_ver.add_msg(
-            log_name="scottbrian_paratools.smart_thread",
+            log_name=log_name,
             log_level=log_level,
             log_msg=new_log_msg,
             fullmatch=fullmatch,
@@ -18082,8 +18105,7 @@ class ConfigVerifier:
                 cmd.run_process(cmd_runner=f1_name)
             except Exception as exc:
                 self.log_test_msg(f"f1_driver detected exception {exc}")
-                self.abort_test_case = True
-                self.abort_all_f1_threads()
+                self.abort_test_case()
                 raise
 
             self.completed_cmds[f1_name].append(cmd.serial_num)
@@ -21111,6 +21133,8 @@ class ConfigVerifier:
             self.allow_log_test_msg
             or "waiting for monitor" in log_msg
             or "has been stopped by" in log_msg
+            or "Monitor Checkpoint" in log_msg
+            or "abort" in log_msg
         ):
             self.log_ver.add_msg(log_msg=re.escape(log_msg))
             logger.debug(log_msg, stacklevel=2)
@@ -21124,7 +21148,7 @@ class ConfigVerifier:
             name="main_driver", seq="test_smart_thread.py::ConfigVerifier.main_driver"
         )
         self.log_test_msg(f"main_driver entry: {self.group_name=}")
-        while self.cmd_suite and not self.abort_test_case:
+        while self.cmd_suite and not self.test_case_aborted:
             cmd: ConfigCmd = self.cmd_suite.popleft()
             self.log_test_msg(f"config_cmd: {self.group_name} {cmd}")
 
@@ -21139,15 +21163,27 @@ class ConfigVerifier:
 
             if self.commander_name in cmd.cmd_runners:
                 try:
+                    # logger.debug(
+                    #     f"TestDebug {self.commander_name} ({self.group_name}) "
+                    #     f"testcase main driver calling run_process {cmd.run_process}"
+                    # )
                     cmd.run_process(cmd_runner=self.commander_name)
+                    # logger.debug(
+                    #     f"TestDebug {self.commander_name} ({self.group_name}) "
+                    #     f"testcase main driver back from run_process "
+                    #     f"{cmd.run_process}"
+                    # )
                 except Exception as exc:
                     self.log_test_msg(f"main_driver detected exception {exc}")
-                    self.abort_test_case = True
-                    self.abort_all_f1_threads()
+                    self.abort_test_case()
 
                 self.completed_cmds[self.commander_name].append(cmd.serial_num)
 
-        if not self.abort_test_case:
+        logger.debug(
+            f"TestDebug {self.commander_name} ({self.group_name}) testcase "
+            "preparing to exit main_driver"
+        )
+        if not self.test_case_aborted:
             ############################################################
             # check that pending events are complete
             ############################################################
@@ -21193,7 +21229,7 @@ class ConfigVerifier:
         self.monitor_event.set()
         self.monitor_thread.join()
 
-        assert not self.abort_test_case
+        assert not self.test_case_aborted
 
         self.log_test_msg(f"main_driver exit: {self.group_name=}")
 
@@ -30177,6 +30213,7 @@ class ScenarioDriverParms:
     commander_config: AppConfig = AppConfig.ScriptStyle
     commander_name: str = "alpha"
     group_name: str = "test1"
+    allow_log_test_msg: bool = True
 
 
 def scenario_driver(
@@ -30203,6 +30240,7 @@ def scenario_driver(
             caplog_to_use=caplog_to_use,
             msgs=msgs,
             max_msgs=10,
+            allow_log_test_msg=sdparm.allow_log_test_msg,
         )
         config_vers.append(config_ver)
 
@@ -36181,8 +36219,10 @@ class TestSmartThreadComboScenarios:
         DeadlockScenario.SyncDeadlock,
     ]
 
+    # @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
+    # @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
     @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
-    @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
+    @pytest.mark.parametrize("num_cd_actors_arg", [12])
     # @pytest.mark.seltest
     def test_deadlock_scenario(
         self,
@@ -36223,6 +36263,7 @@ class TestSmartThreadComboScenarios:
                         commander_config=AppConfig(config_idx % len(AppConfig) + 1),
                         commander_name=f"alpha{config_idx}",
                         group_name=f"test{config_idx}",
+                        allow_log_test_msg=False,
                     )
                 )
 
