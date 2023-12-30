@@ -5099,11 +5099,13 @@ class DebugLogSearchItem(LogSearchItem):
 
     def run_process(self) -> None:
         """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        if split_msg[3] == "testcase":
-            log_name = "test_scottbrian_paratools.test_smart_thread"
-        else:
-            log_name = "scottbrian_paratools.smart_thread"
+        log_name = logger.name
+        # logger.debug(f"SBT the logger name is {log_name}")
+        # split_msg = self.found_log_msg.split()
+        # if split_msg[3] == "testcase":
+        #     log_name = "test_scottbrian_paratools.test_smart_thread"
+        # else:
+        #     log_name = "scottbrian_paratools.smart_thread"
         self.config_ver.add_log_msg(
             re.escape(self.found_log_msg),
             log_level=logging.DEBUG,
@@ -21134,6 +21136,8 @@ class ConfigVerifier:
             or "waiting for monitor" in log_msg
             or "has been stopped by" in log_msg
             or "Monitor Checkpoint" in log_msg
+            or "OuterF1ThreadApp.run() exit: " in log_msg
+            or "outer_f1 exit: " in log_msg
             or "abort" in log_msg
         ):
             self.log_ver.add_msg(log_msg=re.escape(log_msg))
@@ -30213,7 +30217,7 @@ class ScenarioDriverParms:
     commander_config: AppConfig = AppConfig.ScriptStyle
     commander_name: str = "alpha"
     group_name: str = "test1"
-    allow_log_test_msg: bool = True
+    allow_log_test_msg: bool = False
 
 
 def scenario_driver(
@@ -36219,10 +36223,8 @@ class TestSmartThreadComboScenarios:
         DeadlockScenario.SyncDeadlock,
     ]
 
-    # @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
-    # @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
     @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
-    @pytest.mark.parametrize("num_cd_actors_arg", [12])
+    @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
     # @pytest.mark.seltest
     def test_deadlock_scenario(
         self,
