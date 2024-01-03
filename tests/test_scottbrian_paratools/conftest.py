@@ -6,6 +6,7 @@
 from collections import defaultdict
 
 import logging
+from logging.handlers import RotatingFileHandler
 import re
 import queue
 import threading
@@ -27,23 +28,50 @@ from scottbrian_paratools.smart_thread import SmartThread
 ########################################################################
 # logging
 ########################################################################
-# logging.basicConfig(
-#     filename="ThreadComm.log",
-#     filemode="w",
-#     level=logging.DEBUG,
-#     format="%(asctime)s "
-#     "%(msecs)03d "
-#     "[%(levelname)8s] "
-#     "%(threadName)s "
-#     "%(filename)s:"
-#     "%(funcName)s:"
-#     "%(lineno)d "
-#     "%(message)s",
-# )
+logging.basicConfig(
+    filename="ThreadComm.log",
+    filemode="w",
+    level=logging.DEBUG,
+    format="%(asctime)s "
+    "%(msecs)03d "
+    "[%(levelname)8s] "
+    "%(threadName)s "
+    "%(filename)s:"
+    "%(funcName)s:"
+    "%(lineno)d "
+    "%(message)s",
+)
 
+# create logger
 logger = logging.getLogger(__name__)
+logger.setLevel(level=logging.DEBUG)
 
 logging.Logger.manager.loggerDict["scottbrian_locking"].setLevel(logging.CRITICAL)
+
+# set formatter
+# logFileFormatter = logging.Formatter(
+#     fmt=f"%(levelname)s %(created)s (%(relativeCreated)d) \t %(pathname)s F%(funcName)s L%(lineno)s - %(message)s",
+#     datefmt="%Y-%m-%d %H:%M:%S",
+# )
+logFileFormatter = logging.Formatter(
+    fmt=f"%(asctime)s "
+    "%(msecs)03d "
+    "[%(levelname)8s] "
+    "%(threadName)s "
+    "%(filename)s:"
+    "%(funcName)s:"
+    "%(lineno)d "
+    "%(message)s",
+    # datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+# set the handler
+fileHandler = logging.handlers.RotatingFileHandler(
+    filename="ThreadComm.log", maxBytes=100_000, backupCount=16
+)
+fileHandler.setFormatter(logFileFormatter)
+fileHandler.setLevel(level=logging.INFO)
+logger.addHandler(fileHandler)
 
 
 # class MyLogger:

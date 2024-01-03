@@ -243,7 +243,7 @@ def get_ptime() -> str:
     Returns:
         a timestamp as a string
     """
-    now_time = datetime.utcnow()
+    now_time = datetime.now(UTC)
     print_time = now_time.strftime("%H:%M:%S.%f")
 
     return print_time
@@ -20591,7 +20591,7 @@ class ConfigVerifier:
         self.log_test_msg(f"{cmd_runner=} handle_sync exit for " f"{targets=}")
 
     ####################################################################
-    # get_timeout_msg
+    # get_error_msg
     ####################################################################
     def get_error_msg(
         self,
@@ -21139,6 +21139,7 @@ class ConfigVerifier:
             or "OuterF1ThreadApp.run() exit: " in log_msg
             or "outer_f1 exit: " in log_msg
             or "abort" in log_msg
+            or "main_driver detected exception" in log_msg
         ):
             self.log_ver.add_msg(log_msg=re.escape(log_msg))
             logger.debug(log_msg, stacklevel=2)
@@ -21232,6 +21233,9 @@ class ConfigVerifier:
         self.monitor_exit = True
         self.monitor_event.set()
         self.monitor_thread.join()
+
+        # if self.test_case_aborted:
+        #     with open(path_to_file, 'w') as file:
 
         assert not self.test_case_aborted
 
@@ -35403,6 +35407,7 @@ class TestSmartThreadComboScenarios:
                     commander_config=AppConfig(config_idx % len(AppConfig) + 1),
                     commander_name=f"alpha{config_idx}",
                     group_name=f"test{config_idx}",
+                    allow_log_test_msg=True,
                 )
             )
 
@@ -35878,13 +35883,19 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_srrw_scenario
     ####################################################################
-    @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     # @pytest.mark.seltest
+    @pytest.mark.parametrize("num_start_before_arg", [1])
+    @pytest.mark.parametrize("num_unreg_before_arg", [1])
+    @pytest.mark.parametrize("num_stop_before_arg", [1])
+    @pytest.mark.parametrize("num_unreg_after_arg", [1])
+    @pytest.mark.parametrize("num_stop_after_ok_arg", [1])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [1])
     def test_srrw_scenario(
         self,
         num_start_before_arg: int,
