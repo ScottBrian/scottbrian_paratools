@@ -8,7 +8,7 @@ from collections import deque, defaultdict
 from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum, auto
 from itertools import combinations, chain
 import queue
@@ -5880,7 +5880,7 @@ class ConfigVerifier:
         else:
             new_msg_count = cb.pending_msg_count + pending_msg_adj
         self.log_test_msg(
-            f"set_msg_pending_count {receiver=}, "
+            f"TestDebug set_msg_pending_count {receiver=}, "
             f"{pair_key=}, {sender=}, updating from "
             f"{cb.pending_msg_count=} to "
             f"{new_msg_count=}"
@@ -18001,6 +18001,9 @@ class ConfigVerifier:
             verify_data: data to be saved with the snapshot
 
         """
+        self.log_test_msg(
+            f"TestDebug create_snapshot_data entry: {verify_name=} " f"{verify_idx=}"
+        )
         with conditional_registry_lock(
             lock=st.SmartThread._registry[self.group_name].registry_lock,
             obtain_tf=verify_data.obtain_reg_lock,
@@ -20395,7 +20398,10 @@ class ConfigVerifier:
             f"{start_time=}"
         )
         self.monitor_event.set()
-        if self.cmd_waiting_event_items[cmd_runner].wait(timeout=120):
+        if (
+            self.cmd_waiting_event_items[cmd_runner].wait(timeout=120)
+            or self.test_case_aborted
+        ):
             with self.ops_lock:
                 del self.cmd_waiting_event_items[cmd_runner]
         else:
@@ -21140,6 +21146,8 @@ class ConfigVerifier:
             or "outer_f1 exit: " in log_msg
             or "abort" in log_msg
             or "main_driver detected exception" in log_msg
+            or "monitor detected exception" in log_msg
+            or "TestDebug" in log_msg
         ):
             self.log_ver.add_msg(log_msg=re.escape(log_msg))
             logger.debug(log_msg, stacklevel=2)
@@ -21198,33 +21206,41 @@ class ConfigVerifier:
             self.monitor_event.set()
             self.check_pending_events_complete_event.wait(timeout=30)
 
-        names_to_join = st.SmartThread.get_smart_thread_names(
-            group_name=self.group_name,
-            states=(st.ThreadState.Alive, st.ThreadState.Stopped),
-        )
-
-        names_to_join -= {self.commander_name}
-        if names_to_join:
-            join_cmd = JoinTimeoutFalse(
-                cmd_runners=self.commander_name, join_names=names_to_join, timeout=120
+        try:
+            names_to_join = st.SmartThread.get_smart_thread_names(
+                group_name=self.group_name,
+                states=(st.ThreadState.Alive, st.ThreadState.Stopped),
             )
-            self.add_cmd_info(join_cmd)
-            join_cmd.run_process(cmd_runner=self.commander_name)
 
-        names_to_unreg = st.SmartThread.get_smart_thread_names(
-            group_name=self.group_name
-        )
+            names_to_join -= {self.commander_name}
+            if names_to_join:
+                join_cmd = JoinTimeoutFalse(
+                    cmd_runners=self.commander_name,
+                    join_names=names_to_join,
+                    timeout=120,
+                )
+                self.add_cmd_info(join_cmd)
+                join_cmd.run_process(cmd_runner=self.commander_name)
+        except Exception:
+            pass
 
-        self.monitor_event.set()
-
-        if names_to_unreg:
-            unreg_cmd = Unregister(
-                cmd_runners=self.commander_name,
-                unregister_targets=names_to_unreg,
-                post_main_driver=True,
+        try:
+            names_to_unreg = st.SmartThread.get_smart_thread_names(
+                group_name=self.group_name
             )
-            self.add_cmd_info(unreg_cmd)
-            unreg_cmd.run_process(cmd_runner=self.commander_name)
+
+            self.monitor_event.set()
+
+            if names_to_unreg:
+                unreg_cmd = Unregister(
+                    cmd_runners=self.commander_name,
+                    unregister_targets=names_to_unreg,
+                    post_main_driver=True,
+                )
+                self.add_cmd_info(unreg_cmd)
+                unreg_cmd.run_process(cmd_runner=self.commander_name)
+        except Exception:
+            pass
 
         self.monitor_event.set()
 
@@ -21766,24 +21782,24 @@ class ConfigVerifier:
         for name, real_reg_item in real_reg_items.items():
             if name not in self.expected_registered:
                 raise InvalidConfigurationDetected(
-                    f"verify_config found SmartThread real registry has entry "
-                    f"for {name=} that is missing from the expected_registry. "
-                    f"{self.expected_registered.keys()=}"
+                    "verify_config found SmartThread real registry has entry "
+                    f"for {name=} ({self.group_name}) that is missing from the "
+                    f"expected_registry. {self.expected_registered.keys()=}"
                 )
             if self.expected_registered[name].is_alive != real_reg_item.is_alive:
                 raise InvalidConfigurationDetected(
-                    f"verify_config found SmartThread real registry has "
-                    f"entry for {name=} {self.group_name} that has is_alive of "
+                    "verify_config found SmartThread real registry has "
+                    f"entry for {name=} ({self.group_name}) that has is_alive of "
                     f"{real_reg_item.is_alive} which does not match the "
-                    f"expected_registered is_alive of "
+                    "expected_registered is_alive of "
                     f"{self.expected_registered[name].is_alive}"
                 )
             if self.expected_registered[name].st_state != real_reg_item.state:
                 raise InvalidConfigurationDetected(
-                    f"verify_config found SmartThread real registry has "
-                    f"entry for {name=} that has status of "
+                    "verify_config found SmartThread real registry has "
+                    f"entry for {name=} ({self.group_name}) that has status of "
                     f"{real_reg_item.state} which does not match the "
-                    f"mock expected_registered status of "
+                    "mock expected_registered status of "
                     f"{self.expected_registered[name].st_state}"
                 )
 
@@ -21791,45 +21807,43 @@ class ConfigVerifier:
         for name, tracker in self.expected_registered.items():
             if name not in real_reg_items:
                 raise InvalidConfigurationDetected(
-                    f"verify_config found expected_registered has an entry "
-                    f"for {name=} that is missing from real "
-                    f"SmartThread._registry"
+                    "verify_config found expected_registered has an entry "
+                    f"for {name=} ({self.group_name}) that is missing from real "
+                    "SmartThread._registry"
                 )
 
         # verify pair_array matches expected_pairs
         for pair_key, status_blocks in real_pair_array_items.items():
             if len(status_blocks) == 0:
                 raise InvalidConfigurationDetected(
-                    f"verify_config found pair_key {pair_key} in real "
-                    f"SmartThread pair_array that has an empty status_blocks"
+                    f"verify_config found pair_key {pair_key} {self.group_name=} in "
+                    "real SmartThread pair_array that has an empty status_blocks"
                 )
             if pair_key not in self.expected_pairs:
                 raise InvalidConfigurationDetected(
-                    f"verify_config found pair_key {pair_key} in real "
-                    f"SmartThread pair_array that is not found in "
-                    f"expected_pairs"
+                    f"verify_config found pair_key {pair_key} {self.group_name=} in "
+                    "real SmartThread pair_array that is not found in expected_pairs"
                 )
             for name, status_item in status_blocks.items():
                 if name not in real_reg_items:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found SmartThread real pair_array "
-                        f"has a status_blocks entry for {name=} that is "
-                        f"missing from the real registry. "
+                        "verify_config found SmartThread real pair_array "
+                        f"has a status_blocks entry for {name=} ({self.group_name}) "
+                        "that is missing from the real registry."
                     )
 
                 if name not in self.expected_registered:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in real "
-                        f"SmartThread pair_array status_blocks for pair_key"
-                        f" {pair_key}, but is missing in mock "
-                        f"expected_registered"
+                        f"verify_config found {name=} ({self.group_name}) in real "
+                        "SmartThread pair_array status_blocks for pair_key "
+                        f"{pair_key}, but is missing in mock expected_registered"
                     )
 
                 if name not in self.expected_pairs[pair_key].keys():
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in real "
-                        f"SmartThread pair_array status_blocks for pair_key"
-                        f" {pair_key}, but is missing in expected_pairs"
+                        f"verify_config found {name=} ({self.group_name}) in real "
+                        "SmartThread pair_array status_blocks for pair_key "
+                        f"{pair_key}, but is missing in expected_pairs"
                     )
 
                 if len(status_blocks) == 1:
@@ -21841,41 +21855,40 @@ class ConfigVerifier:
                         or status_item.pending_sync
                     ):
                         raise InvalidConfigurationDetected(
-                            f"verify_config found {name=} in real "
-                            f"SmartThread pair_array status_blocks for "
+                            f"verify_config found {name=} ({self.group_name}) in real "
+                            "SmartThread pair_array status_blocks for "
                             f"pair_key {pair_key}, but it is a single "
-                            f"name that has no pending reasons and is not "
-                            f"del_deferred"
+                            "name that has no pending reasons and is not del_deferred."
                         )
                 mock_status_item = self.expected_pairs[pair_key][name]
                 if status_item.pending_request != mock_status_item.pending_request:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in real "
-                        f"SmartThread pair_array status_blocks for "
+                        f"verify_config found {name=} ({self.group_name}) in real "
+                        "SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_request=} which does not "
                         f"match {mock_status_item.pending_request=}"
                     )
                 if status_item.pending_msg_count != mock_status_item.pending_msg_count:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in real "
-                        f"SmartThread pair_array status_blocks for "
+                        f"verify_config found {name=} ({self.group_name}) in real "
+                        "SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_msg_count=} which does not "
                         f"match {mock_status_item.pending_msg_count=}"
                     )
                 if status_item.pending_wait != mock_status_item.pending_wait:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in real "
-                        f"SmartThread pair_array status_blocks for "
+                        f"verify_config found {name=} ({self.group_name}) in real "
+                        "SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_wait=} which does not "
                         f"match {mock_status_item.pending_wait=}"
                     )
                 if status_item.pending_sync != mock_status_item.pending_sync:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in real "
-                        f"SmartThread pair_array status_blocks for "
+                        f"verify_config found {name=} ({self.group_name}) in real "
+                        "SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_sync=} which does not "
                         f"match {mock_status_item.pending_sync=}"
@@ -21885,28 +21898,27 @@ class ConfigVerifier:
         for pair_key, mock_status_blocks in self.expected_pairs.items():
             if pair_key not in real_pair_array_items:
                 raise InvalidConfigurationDetected(
-                    f"verify_config found {pair_key=} in expected_pairs but "
-                    f"not in real SmartThread pair_array"
+                    f"verify_config found {pair_key=} {self.group_name=} in "
+                    "expected_pairs but not in real SmartThread pair_array"
                 )
             for name, mock_status_item in mock_status_blocks.items():
                 if name not in real_reg_items:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found SmartThread mock pair_array "
-                        f"has a status_blocks entry for {name=} that is "
-                        f"missing from the real registry. "
+                        "verify_config found SmartThread mock pair_array "
+                        f"has a status_blocks entry for {name=} ({self.group_name}) "
+                        "that is missing from the real registry. "
                     )
 
                 if name not in self.expected_registered:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in mock "
-                        f"pair_array status_blocks for pair_key"
-                        f" {pair_key}, but is missing in "
-                        f"mock expected_registered"
+                        f"verify_config found {name=} ({self.group_name}) in mock "
+                        "pair_array status_blocks for pair_key"
+                        f" {pair_key}, but is missing in mock expected_registered."
                     )
 
                 if name not in real_pair_array_items[pair_key]:
                     raise InvalidConfigurationDetected(
-                        f"verify_config found {name=} in mock "
+                        f"verify_config found {name=} ({self.group_name}) in mock "
                         f"expected_pairs for pair_key {pair_key}, but not in "
                         "real SmartThread pair_array status_blocks"
                     )
