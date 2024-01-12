@@ -28,19 +28,19 @@ from scottbrian_paratools.smart_thread import SmartThread
 ########################################################################
 # logging
 ########################################################################
-logging.basicConfig(
-    filename="ThreadComm.log",
-    filemode="w",
-    level=logging.DEBUG,
-    format="%(asctime)s "
-    "%(msecs)03d "
-    "[%(levelname)8s] "
-    "%(threadName)s "
-    "%(filename)s:"
-    "%(funcName)s:"
-    "%(lineno)d "
-    "%(message)s",
-)
+# logging.basicConfig(
+#     filename="ThreadComm.log",
+#     filemode="w",
+#     level=logging.DEBUG,
+#     format="%(asctime)s "
+#     "%(msecs)03d "
+#     "[%(levelname)8s] "
+#     "%(threadName)s "
+#     "%(filename)s:"
+#     "%(funcName)s:"
+#     "%(lineno)d "
+#     "%(message)s",
+# )
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ fileHandler = logging.handlers.RotatingFileHandler(
     filename="ThreadComm.log", maxBytes=100_000, backupCount=16
 )
 fileHandler.setFormatter(logFileFormatter)
-fileHandler.setLevel(level=logging.INFO)
+fileHandler.setLevel(level=logging.DEBUG)
 logger.addHandler(fileHandler)
 
 

@@ -33607,7 +33607,7 @@ class TestSmartThreadErrors:
                 "SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {req}. "
                 "The SmartThread object used for the invocation is not "
-                "know to the configuration. "
+                "known to the configuration. "
                 f"Group name: {group_name_arg}, "
                 f"Name: {beta_1_s_thread.name}, "
                 f"ID: {id(beta_1_s_thread)}, "
@@ -33668,7 +33668,6 @@ class TestSmartThreadErrors:
             alpha_s_2_thread.smart_unreg(targets="beta")
         else:
             alpha_s_2_thread.smart_unreg(targets="beta")
-            del st.SmartThread._registry[group_name_arg]
 
         beta_2_s_thread = st.SmartThread(
             group_name="test1",
@@ -33697,7 +33696,7 @@ class TestSmartThreadErrors:
                 "SmartThreadDetectedOpFromForeignThread error "
                 "while processing request smart_start. "
                 "The SmartThread object used for the invocation is not "
-                "know to the configuration. "
+                "known to the configuration. "
                 f"Group name: {group_name_arg}, "
                 f"Name: {beta_1_s_thread.name}, "
                 f"ID: {id(beta_1_s_thread)}, "
@@ -33813,7 +33812,7 @@ class TestSmartThreadErrors:
                 "SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {req}. "
                 "The SmartThread object used for the invocation is not "
-                "know to the configuration. "
+                "known to the configuration. "
                 "Group name: test1, "
                 f"Name: {beta_1_s_thread.name}, "
                 f"ID: {id(beta_1_s_thread)}, "

@@ -2243,6 +2243,7 @@ class SmartThread:
         # Since smart_start does not have a timeout, work_remotes as an
         # instance variable is not used in smart_start and is instead a
         # local variable.
+        delete_group = False
         with sel.SELockExcl(self.registry_lock):
             if targets is None:
                 targets = {self.name}
@@ -2300,12 +2301,26 @@ class SmartThread:
                     request_pending_remotes=request_pending_targets,
                 )
 
-            self.request = ReqType.NoReq
+            if not self.registry:
+                # the last SmartThread was just unregistered - set flag
+                # to delete the registry (we need to drop the registry
+                # lock first and then obtain the group lock)
+                delete_group = True
 
-            if cmd_block.exit_log_msg:
-                logger.debug(cmd_block.exit_log_msg)
+        # if we just deleted the last SmartThread from our registry
+        # then we need to remove the empty group registry
+        if delete_group:
+            with SmartThread._group_lock:
+                # we need to check again after obtaining the lock
+                if not SmartThread._registry[self.group_name].registry:
+                    del SmartThread._registry[self.group_name]
 
-            return self.unreged_targets
+        self.request = ReqType.NoReq
+
+        if cmd_block.exit_log_msg:
+            logger.debug(cmd_block.exit_log_msg)
+
+        return self.unreged_targets
 
     ####################################################################
     # join
@@ -5238,7 +5253,7 @@ class SmartThread:
                     f"SmartThreadDetectedOpFromForeignThread error "
                     f"while processing request {request.value}. "
                     "The SmartThread object used for the invocation is not "
-                    "know to the configuration. "
+                    "known to the configuration. "
                     f"Group name: {self.group_name}, "
                     f"Name: {self.name}, "
                     f"ID: {id(self)}, "
